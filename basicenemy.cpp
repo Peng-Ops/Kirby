@@ -1,7 +1,7 @@
 #include "basicenemy.h"
 #include <QTransform>
 
-BasicEnemy::BasicEnemy(QString spritePath, int frames, double speed, CopyAbility ab) {
+MinionEnemy::MinionEnemy(QString spritePath, int frames, double speed, CopyAbility ab) {
     // 1. 把传进来的能力标签存到基类的 ability 变量中
     this->ability = ab;
 
@@ -28,7 +28,7 @@ BasicEnemy::BasicEnemy(QString spritePath, int frames, double speed, CopyAbility
     vx = -walkSpeed;
 }
 
-void BasicEnemy::updateLogic() {
+void MinionEnemy::updateLogic() {
     if (isDead) return;
 
     // ====== 新增：巡逻计时逻辑 ======
@@ -58,7 +58,7 @@ void BasicEnemy::updateLogic() {
         }
     }
 }
-void BasicEnemy::reverseDirection() {
+void MinionEnemy::reverseDirection() {
     facingRight = !facingRight; // 翻转朝向
     patrolTimer = 0;            // 重点：无论是因为撞墙还是时间到了，掉头后都重新开始计时
 }

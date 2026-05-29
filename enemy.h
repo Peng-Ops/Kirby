@@ -24,6 +24,11 @@ public:
     // 给每个敌人身上带一个能力标签，默认没有能力
     CopyAbility ability = NONE;
 
+    // Boss相关标记：是否无视地形碰撞（可穿墙飞行）
+    bool ignoresTiles = false;
+    // Boss相关标记：是否可被卡比吞噬
+    virtual bool canBeSwallowed() { return true; }
+
     virtual void takeDamage(int dmg) {
         hp -= dmg;
         if (hp <= 0) {

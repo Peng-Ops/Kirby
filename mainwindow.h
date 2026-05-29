@@ -16,6 +16,10 @@
 #include "enemy.h"
 #include "projectile.h"
 #include "cake.h"
+#include "checkpoint.h"
+#include "dukefishron.h"
+#include "brainofcthulhu.h"
+#include "icegod.h"
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -46,12 +50,22 @@ private:
     QList<QGraphicsRectItem*> backgroundLayers; // 新增：用于记录背景图层
     int lastHorizontalKey = 0;
     QList<Tile*> floors;
+    QList<Tile*> spikes;  // 刺方块（对玩家造成伤害）
     QSet<int> keys;
     int jumpBuffer = 0;
     int coyoteTime = 0;
     QList<Enemy*> enemies;
+    DukeFishron* dukeFishron = nullptr;        // 猪鲨Boss
+    BrainOfCthulhu* brainOfCthulhu = nullptr;  // 克苏鲁之脑Boss
+    IceGod* iceGod = nullptr;                  // 冰雪之神Boss
+    QGraphicsRectItem* bossHpBarBg = nullptr;  // Boss血条背景
+    QGraphicsRectItem* bossHpBarFg = nullptr;  // Boss血条前景
+    QGraphicsTextItem* cooldownText = nullptr;   // 技能冷却HUD（右下角）
     QList<Projectile*> projectiles;
     QList<Cake*> cakes;
+    QList<Checkpoint*> checkpoints;
+    QPointF lastCheckpointPos;  // 最新激活的检查点复活位置
+    bool hasCheckpoint = false; // 是否已激活过检查点
     QVector<QPixmap> weiqiFrames;
     QList<QGraphicsPixmapItem*> exhaustItems;
     QList<int> exhaustLifetimes;

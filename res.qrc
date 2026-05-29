@@ -40,12 +40,10 @@
         <file>tu/leaf_walk.png</file>
         <file>tu/leaf_fly.png</file>
         <file>tu/leaf_fangun.png</file>
-        <file>tu/leaf_sucai.png</file>
         <file>tu/lightning_daiji.png</file>
         <file>tu/lightning_walk.png</file>
         <file>tu/lightning_fly.png</file>
         <file>tu/lightning_fangun.png</file>
-        <file>tu/lightning_sucai.png</file>
         <file>tu/kerby theme music.mp3</file>
         <file>tu/fire_baozha.png</file>
         <file>tu/fire_speedrun.png</file>
@@ -53,5 +51,18 @@
         <file>tu/feather.png</file>
         <file>tu/leaf_attack.png</file>
         <file>tu/ice_defend.png</file>
+        <file>tu/pig_shark.png</file>
+        <file>tu/checkpoint.png</file>
+        <file>tu/checkpoint_check.png</file>
+        <file>tu/ci.png</file>
+        <file>tu/ci2.png</file>
+        <file>tu/ci3.png</file>
+        <file>tu/qiangci.png</file>
+        <file>tu/daoci.png</file>
+        <file>tu/brainofcthlu.png</file>
+        <file>tu/cthulubrain_attack.png</file>
+        <file>tu/xuehuaguai.png</file>
+        <file>tu/icegod_attack.png</file>
+        <file>tu/ice god.png</file>
     </qresource>
 </RCC>

@@ -59,6 +59,12 @@ MainWindow::MainWindow(QWidget *parent)
     // 加载冰块和碎石的素材
     QPixmap iceBlockPix(":/tu/ice.png");
     QPixmap rubblePix(":/tu/suishi.png");
+    // 加载五种刺的素材
+    QPixmap ciPix(":/tu/ci.png");
+    QPixmap ci2Pix(":/tu/ci2.png");
+    QPixmap ci3Pix(":/tu/ci3.png");
+    QPixmap qiangciPix(":/tu/qiangci.png");
+    QPixmap daociPix(":/tu/daoci.png");
     // ====== 新增：切割尾气素材（假设为横向两帧） ======
     QPixmap weiqiSheet(":/tu/weiqi.png");
     if (!weiqiSheet.isNull()) {
@@ -83,7 +89,7 @@ MainWindow::MainWindow(QWidget *parent)
         "000000000000000000000000000000000000000000000",
         "000000000000000000000000000000000000000000000",
         "000000000000000000055000000006600000000000000",
-        "000000000000000000055000000006600000000000000", // 让地面大概出现在第10行左右
+        "000000000000000000055000000006600000000000000",
         "11111111111111111111111111111111111111111111111111111111111111111111111",
     };
 
@@ -101,11 +107,20 @@ MainWindow::MainWindow(QWidget *parent)
             else if (type == '4')  tile = new Tile(Tile::WaterBody, waterBody);
             else if (type == '5')  tile = new Tile(Tile::IceBlock, iceBlockPix);
             else if (type == '6')  tile = new Tile(Tile::RubbleBlock, rubblePix);
+            else if (type == '7')  tile = new Tile(Tile::Spike, ciPix);
+            else if (type == '8')  tile = new Tile(Tile::Spike, ci2Pix);
+            else if (type == '9')  tile = new Tile(Tile::Spike, ci3Pix);
+            else if (type == 'A')  tile = new Tile(Tile::Spike, qiangciPix);
+            else if (type == 'B')  tile = new Tile(Tile::Spike, daociPix);
             if (tile) {
                 tile->setPos(c * renderSize, r * renderSize + bottomOffset);
                 tile->setScale(2.0);
                 scene->addItem(tile);
                 if (type == '1' || type == '2' || type == '5' || type == '6') floors.append(tile);
+                if (type == '7' || type == '8' || type == '9' || type == 'A' || type == 'B') {
+                    floors.append(tile);  // 刺也能站上去（物理碰撞）
+                    spikes.append(tile);  // 但对玩家造成伤害
+                }
             }
         }
     }
@@ -115,33 +130,76 @@ MainWindow::MainWindow(QWidget *parent)
     player->setPos(800, 904);
     scene->addItem(player);
     //生成敌人！
-    BasicEnemy* fireEnemy = new BasicEnemy(":/tu/fire_enemy.png", 5, 1.5, Enemy::FIRE);
+    MinionEnemy* fireEnemy = new MinionEnemy(":/tu/fire_enemy.png", 5, 1.5, Enemy::FIRE);
     fireEnemy->setScale(2);
     fireEnemy->setPos(1200, 500);
     fireEnemy->setVisible(false);
     scene->addItem(fireEnemy);
     enemies.append(fireEnemy);
 
-    BasicEnemy* iceEnemy = new BasicEnemy(":/tu/Ice_Dude.png", 6, 1.2, Enemy::ICE);
+    MinionEnemy* iceEnemy = new MinionEnemy(":/tu/Ice_Dude.png", 6, 1.2, Enemy::ICE);
     iceEnemy->setScale(0.6);
     iceEnemy->setPos(1600, 500);
     iceEnemy->setVisible(false);
     scene->addItem(iceEnemy);
     enemies.append(iceEnemy);
 
-    BasicEnemy* leafEnemy = new BasicEnemy(":/tu/Leaf_Dude.png", 8, 1.0, Enemy::LEAF);
+    MinionEnemy* leafEnemy = new MinionEnemy(":/tu/Leaf_Dude.png", 8, 1.0, Enemy::LEAF);
     leafEnemy->setScale(0.6);
     leafEnemy->setPos(2000, 500);
     leafEnemy->setVisible(false);
     scene->addItem(leafEnemy);
     enemies.append(leafEnemy);
 
-    BasicEnemy* lightningEnemy = new BasicEnemy(":/tu/Lightning_Dude.png", 6, 1.8, Enemy::SPARK);
+    MinionEnemy* lightningEnemy = new MinionEnemy(":/tu/Lightning_Dude.png", 6, 1.8, Enemy::SPARK);
     lightningEnemy->setScale(0.6);
     lightningEnemy->setPos(2400, 500);
     lightningEnemy->setVisible(false);
     scene->addItem(lightningEnemy);
     enemies.append(lightningEnemy);
+
+    // 猪鲨Boss
+    dukeFishron = new DukeFishron(player);
+    dukeFishron->setPos(3000, 400);
+    dukeFishron->setVisible(false);
+    scene->addItem(dukeFishron);
+    enemies.append(dukeFishron);
+
+    // 克苏鲁之脑Boss
+    brainOfCthulhu = new BrainOfCthulhu(player);
+    brainOfCthulhu->setPos(4200, 400);
+    brainOfCthulhu->setVisible(false);
+    scene->addItem(brainOfCthulhu);
+    enemies.append(brainOfCthulhu);
+
+    // 冰雪之神Boss
+    iceGod = new IceGod(player);
+    iceGod->setPos(3600, 400);
+    iceGod->setVisible(false);
+    scene->addItem(iceGod);
+    enemies.append(iceGod);
+    // 初始召唤4个雪花
+    iceGod->summonXuehuas(4);
+    for (Xuehua* x : iceGod->pendingXuehuas) {
+        scene->addItem(x);
+        enemies.append(x);
+    }
+    iceGod->pendingXuehuas.clear();
+
+    // Boss血条
+    bossHpBarBg = new QGraphicsRectItem(0, 0, 100, 8);
+    bossHpBarBg->setBrush(QBrush(QColor(60, 60, 60)));
+    bossHpBarBg->setPen(Qt::NoPen);
+    bossHpBarBg->setZValue(2000);
+    bossHpBarBg->setVisible(false);
+    scene->addItem(bossHpBarBg);
+
+    bossHpBarFg = new QGraphicsRectItem(0, 0, 100, 8);
+    bossHpBarFg->setBrush(QBrush(QColor(220, 30, 30)));
+    bossHpBarFg->setPen(Qt::NoPen);
+    bossHpBarFg->setZValue(2001);
+    bossHpBarFg->setVisible(false);
+    scene->addItem(bossHpBarFg);
     // 6. 游戏循环
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::gameUpdate);
@@ -156,12 +214,44 @@ MainWindow::MainWindow(QWidget *parent)
         scene->addItem(icon);
         lifeIcons.append(icon);
     }
+    // ====== 技能冷却HUD (右下角) ======
+    cooldownText = new QGraphicsTextItem();
+    cooldownText->setFont(QFont("SimHei", 16, QFont::Bold));
+    cooldownText->setDefaultTextColor(QColor(255, 255, 200)); // 淡黄色
+    cooldownText->setZValue(2000);
+    cooldownText->setVisible(false);
+    scene->addItem(cooldownText);
+
     // ====== 新增：在场景中生成一个测试蛋糕 ======
     Cake* testCake = new Cake();
     testCake->setPos(250, 600);
     testCake->setVisible(false);
     scene->addItem(testCake);
     cakes.append(testCake);
+    // ====== 放置检查点 ======
+    Checkpoint* cp1 = new Checkpoint();
+    cp1->setPos(600, 800);
+    cp1->setVisible(false);
+    cp1->setScale(2.0);
+    scene->addItem(cp1);
+    checkpoints.append(cp1);
+
+    Checkpoint* cp2 = new Checkpoint();
+    cp2->setPos(1800, 800);
+    cp2->setVisible(false);
+    cp2->setScale(2.0);
+    scene->addItem(cp2);
+    checkpoints.append(cp2);
+
+    Checkpoint* cp3 = new Checkpoint();
+    cp3->setPos(3200, 800);
+    cp3->setVisible(false);
+    cp3->setScale(2.0);
+    scene->addItem(cp3);
+    checkpoints.append(cp3);
+
+    // 初始复活位置 = 卡比出生点
+    lastCheckpointPos = QPointF(800, 904);
     titleText = new QGraphicsTextItem("星之卡比");
     titleText->setFont(QFont("SimHei", 48, QFont::Bold));
     titleText->setDefaultTextColor(Qt::white);
@@ -474,6 +564,7 @@ void MainWindow::gameUpdate() {
             currentState = PLAYING;
             for (Enemy* e : enemies) e->setVisible(true);
             for (Cake* c : cakes) c->setVisible(true);
+            for (Checkpoint* cp : checkpoints) cp->setVisible(true);
         }
 
         player->updateLogic();
@@ -797,6 +888,11 @@ void MainWindow::gameUpdate() {
     view->centerOn(player);
 
 
+    // ====== 运动方块更新（会动的刺等） ======
+    for (Tile* tile : floors) {
+        tile->updateLogic();
+    }
+
     // ====== 敌人物理与逻辑计算 ======
     for (Enemy* enemy : enemies) {
         if (enemy->isDead) continue;
@@ -804,40 +900,45 @@ void MainWindow::gameUpdate() {
         // 1. 更新敌人自身逻辑 (决定 vx 和动画)
         enemy->updateLogic();
 
-        // 2. 水平移动与墙壁碰撞
+        // 2. 水平移动与墙壁碰撞（Boss无视地形）
         enemy->setPos(enemy->x() + enemy->vx, enemy->y());
-        QRectF eRect = enemy->sceneBoundingRect();
-        for (Tile *tile : floors) {
-            if (enemy->collidesWithItem(tile)) {
-                QRectF tRect = tile->sceneBoundingRect();
-                // 物理阻挡
-                if (enemy->vx > 0) {
-                    enemy->setPos(tRect.left() - eRect.width(), enemy->y());
-                } else if (enemy->vx < 0) {
-                    enemy->setPos(tRect.right(), enemy->y());
+        if (!enemy->ignoresTiles) {
+            QRectF eRect = enemy->sceneBoundingRect();
+            for (Tile *tile : floors) {
+                if (enemy->collidesWithItem(tile)) {
+                    QRectF tRect = tile->sceneBoundingRect();
+                    // 物理阻挡
+                    if (enemy->vx > 0) {
+                        enemy->setPos(tRect.left() - eRect.width(), enemy->y());
+                    } else if (enemy->vx < 0) {
+                        enemy->setPos(tRect.right(), enemy->y());
+                    }
+                    // 撞墙后掉头
+                    enemy->reverseDirection();
+                    break;
                 }
-                // 撞墙后掉头
-                enemy->reverseDirection();
-                break;
             }
-        }
 
-        // 3. 应用重力 (自由落体算法)
-        enemy->vy += 0.8;
-        if (enemy->vy > 15) enemy->vy = 15; // 终端速度限制
+            // 3. 应用重力 (自由落体算法)
+            enemy->vy += 0.8;
+            if (enemy->vy > 15) enemy->vy = 15; // 终端速度限制
 
-        // 4. 垂直移动与地面碰撞
-        enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
-        eRect = enemy->sceneBoundingRect();
-        for (Tile *tile : floors) {
-            if (enemy->collidesWithItem(tile)) {
-                QRectF tRect = tile->sceneBoundingRect();
-                if (enemy->vy > 0) { // 往下掉时踩到地板
-                    enemy->setPos(enemy->x(), tRect.top() - eRect.height());
-                    enemy->vy = 0; // 落地速度清零
+            // 4. 垂直移动与地面碰撞
+            enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
+            eRect = enemy->sceneBoundingRect();
+            for (Tile *tile : floors) {
+                if (enemy->collidesWithItem(tile)) {
+                    QRectF tRect = tile->sceneBoundingRect();
+                    if (enemy->vy > 0) { // 往下掉时踩到地板
+                        enemy->setPos(enemy->x(), tRect.top() - eRect.height());
+                        enemy->vy = 0; // 落地速度清零
+                    }
+                    break;
                 }
-                break;
             }
+        } else {
+            // Boss无视地形，直接应用vy（飞行类Boss自己控制vy）
+            enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
         }
     }
     // ====== 相机边界限位与背景固定逻辑 ======
@@ -873,6 +974,86 @@ void MainWindow::gameUpdate() {
         qreal bgX = cameraX - bg->rect().width() / 2.0;
         bg->setPos(bgX, 0);
     }
+
+    // ====== Boss血条（屏幕右上角HUD） ======
+    // 找到当前存活且可见的Boss（猪鲨或克苏鲁之脑）
+    BossEnemy* activeBoss = nullptr;
+    int bossFullHp = 1;
+    if (dukeFishron && !dukeFishron->isDead && dukeFishron->isVisible()) {
+        activeBoss = dukeFishron;
+        bossFullHp = dukeFishron->fullHp;
+    } else if (brainOfCthulhu && !brainOfCthulhu->isDead && brainOfCthulhu->isVisible()) {
+        activeBoss = brainOfCthulhu;
+        bossFullHp = brainOfCthulhu->fullHp;
+    } else if (iceGod && !iceGod->isDead && iceGod->isVisible()) {
+        activeBoss = iceGod;
+        bossFullHp = iceGod->fullHp;
+    }
+    if (activeBoss && activeBoss->hp > 0) {
+        double barW = 120.0;
+        double barH = 10.0;
+        double barX = cameraX + halfViewW - barW - 20;
+        double barY = cameraY - view->viewport()->height() / 1.2 + 20;
+        bossHpBarBg->setVisible(true);
+        bossHpBarBg->setRect(0, 0, barW, barH);
+        bossHpBarBg->setPos(barX, barY);
+        bossHpBarFg->setVisible(true);
+        double ratio = (double)activeBoss->hp / bossFullHp;
+        if (ratio < 0) ratio = 0;
+        bossHpBarFg->setRect(0, 0, barW * ratio, barH);
+        bossHpBarFg->setPos(barX, barY);
+    } else {
+        if (bossHpBarBg) bossHpBarBg->setVisible(false);
+        if (bossHpBarFg) bossHpBarFg->setVisible(false);
+    }
+
+    // ====== 技能冷却HUD (右下角) ======
+    int cooldown = 0;
+    QString cdLabel;
+    switch (player->currentForm) {
+        case Enemy::FIRE: cooldown = player->fireSkillCooldownTimer; cdLabel = "火疾跑"; break;
+        case Enemy::ICE:  cooldown = player->iceDefendCooldownTimer; cdLabel = "冰防御"; break;
+        case Enemy::LEAF: cooldown = player->leafSkillCooldownTimer; cdLabel = "叶羽毛"; break;
+        default: break;
+    }
+    if (cooldown > 0) {
+        int sec = (cooldown + 59) / 60;
+        cooldownText->setPlainText(QString("%1: %2s").arg(cdLabel).arg(sec));
+        qreal scrRight  = cameraX + halfViewW;
+        qreal scrBottom = cameraY + view->viewport()->height() / 2.0;
+        qreal tw = cooldownText->boundingRect().width();
+        qreal th = cooldownText->boundingRect().height();
+        cooldownText->setPos(scrRight - tw - 20, scrBottom - th - 20);
+        cooldownText->setVisible(true);
+    } else {
+        cooldownText->setVisible(false);
+    }
+
+    // ====== 消费IceGod新召唤的雪花 ======
+    if (iceGod && !iceGod->isDead) {
+        for (Xuehua* x : iceGod->pendingXuehuas) {
+            scene->addItem(x);
+            enemies.append(x);
+        }
+        iceGod->pendingXuehuas.clear();
+    }
+
+    // ====== 消费Boss待发射弹幕 ======
+    if (brainOfCthulhu && !brainOfCthulhu->isDead) {
+        for (Projectile* p : brainOfCthulhu->pendingProjectiles) {
+            scene->addItem(p);
+            projectiles.append(p);
+        }
+        brainOfCthulhu->pendingProjectiles.clear();
+    }
+    if (iceGod && !iceGod->isDead) {
+        for (Projectile* p : iceGod->pendingProjectiles) {
+            scene->addItem(p);
+            projectiles.append(p);
+        }
+        iceGod->pendingProjectiles.clear();
+    }
+
     // ====== 子弹逻辑与伤害判定 ======
     // 逆序遍历，方便在遍历中安全地删除元素
     for (int i = projectiles.size() - 1; i >= 0; i--) {
@@ -881,10 +1062,10 @@ void MainWindow::gameUpdate() {
 
         bool hitEnemy = false;
         bool hitWall = false; // 新增：是否撞墙的标志位
-        // 1. 检测是否打到敌人
+        // 1. 检测是否打到敌人（仅限对敌人有害的弹幕，Boss弹幕不会自伤）
         for (int j = enemies.size() - 1; j >= 0; j--) {
             Enemy* enemy = enemies[j];
-            if (!enemy->isDead && proj->collidesWithItem(enemy)) {
+            if (proj->hurtsEnemies && !enemy->isDead && proj->collidesWithItem(enemy)) {
                 // 扣血
                 enemy->takeDamage(proj->damage);
                 hitEnemy = true;
@@ -910,16 +1091,43 @@ void MainWindow::gameUpdate() {
                 }
             }
         }
-        // 3. 检测光球是否寿命耗尽 或 击中了敌人
-        if (hitEnemy ||hitWall|| proj->lifeTime <= 0) {
+        // 2.5 检测Boss弹幕是否打到玩家
+        bool hitPlayer = false;
+        if (proj->hurtsPlayer && player->invulnTimer == 0 && player->hp > 0) {
+            if (proj->collidesWithItem(player)) {
+                hitPlayer = true;
+                if (!player->isRolling && !player->isSwallowing && !player->isIceDefending) {
+                    player->hp--;
+                    player->invulnTimer = 60;
+                    player->vy = -4;
+                }
+            }
+        }
+
+        // 3. 检测光球是否寿命耗尽 或 击中了敌人/玩家/墙
+        if (hitEnemy || hitPlayer || hitWall || proj->lifeTime <= 0) {
             scene->removeItem(proj);
             projectiles.removeAt(i);
             delete proj;
         }
     }
+    // ====== 玩家与刺的碰撞检测 ======
+    if (player->invulnTimer == 0 && player->hp > 0) {
+        for (Tile* spike : spikes) {
+            if (player->collidesWithItem(spike)) {
+                player->hp--;
+                player->invulnTimer = 60;
+                player->vy = -6;
+                break; // 一帧内只被刺伤一次
+            }
+        }
+    }
+
     // ====== 新增：玩家与敌人碰撞检测 (受击扣血) ======
     if (player->invulnTimer == 0 && player->hp > 0) {
         // 必须用逆序遍历，因为火形态疾跑爆炸可能会直接杀死敌人并将其从内存删除
+        // 但如果被刺伤到，不再检测敌人碰撞
+        if (player->hp > 0) {
         for (int j = enemies.size() - 1; j >= 0; j--) {
             Enemy* enemy = enemies[j];
             // 只有活着的目标才能对玩家造成伤害
@@ -944,22 +1152,68 @@ void MainWindow::gameUpdate() {
                     continue; // 爆炸期间具有绝对无敌免伤，跳过下方扣血代码
                 }
 
-                // 扣除生命值并给予1秒(60帧)无敌时间
                 player->hp--;
                 player->invulnTimer = 60;
-
-                // 受击效果：给卡比一个微微向上的弹跳击退感
                 player->vy = -6;
-
-                // 检查游戏结束
-                if (player->hp <= 0) {
-                    timer->stop(); // 停止游戏主循环
-                    QMessageBox::critical(this, "Game Over", "卡比没命了！游戏结束！");
-                    this->close(); // 关闭游戏窗口
-                    return;        // 直接返回，防止后续代码报错
-                }
                 break; // 单帧内只承受一次伤害
             }
+        }
+        } // if (player->hp > 0) 被刺伤后跳过敌人检测
+    }
+
+    // ====== 统一死亡检查（刺或敌人都可能导致死亡）======
+    if (player->hp <= 0) {
+        timer->stop();
+
+        QGraphicsTextItem* gameOverText = new QGraphicsTextItem("GAME OVER");
+        gameOverText->setFont(QFont("SimHei", 48, QFont::Bold));
+        gameOverText->setDefaultTextColor(Qt::red);
+        gameOverText->setZValue(2000);
+        qreal goX = cameraX - 180;
+        qreal goY = cameraY - view->viewport()->height() / 3;
+        gameOverText->setPos(goX, goY);
+        scene->addItem(gameOverText);
+
+        QTimer::singleShot(1500, this, [this, gameOverText]() {
+            QMessageBox::StandardButton reply =
+                QMessageBox::question(this, "Game Over", "是否要复活？");
+            scene->removeItem(gameOverText);
+            delete gameOverText;
+
+            if (reply == QMessageBox::Yes) {
+                player->setPos(lastCheckpointPos.x(), lastCheckpointPos.y());
+                player->hp = 3;
+                player->invulnTimer = 60;
+                player->vy = 0;
+                player->vx = 0;
+                player->currentForm = Enemy::NONE;
+                player->isFatty = false;
+                player->attackPowerTimer = 0;
+                player->isAttacking = false;
+                player->isRolling = false;
+                player->isSwallowing = false;
+                player->isSpitting = false;
+                player->isDigesting = false;
+                player->isLeafSkill = false;
+                player->isLightningFlying = false;
+                player->isIceDefending = false;
+                player->isExploding = false;
+                player->isFireSprinting = false;
+                player->isHovering = false;
+                timer->start();
+            } else {
+                this->close();
+            }
+        });
+        return;
+    }
+
+    // ====== 检查点碰撞检测 ======
+    for (Checkpoint* cp : checkpoints) {
+        if (!cp->isActivated && player->collidesWithItem(cp)) {
+            cp->activate();
+            lastCheckpointPos = cp->pos();
+            hasCheckpoint = true;
         }
     }
 
@@ -993,7 +1247,7 @@ void MainWindow::gameUpdate() {
         // 3. 逆序检查场景中的怪物（拉扯与进肚）
         for (int j = enemies.size() - 1; j >= 0; j--) {
             Enemy* enemy = enemies[j];
-            if (!enemy->isDead) {
+            if (!enemy->isDead && enemy->canBeSwallowed()) {
                 QRectF enemyRect = enemy->sceneBoundingRect();
 
                 // 【怪物阶段一】：触碰身体 -> 真正吸进肚子里
