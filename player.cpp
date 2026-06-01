@@ -712,7 +712,7 @@ void Player::startDigest() {
     currentFrame = 0;
     animTimer = 0;
 }
-// 在文件末尾或合适的地方添加这两个函数：
+
 void Player::startIceDefend() {
     if (isIceDefending || iceDefendCooldownTimer > 0 || iceDefendFrames.isEmpty()) return;
     isIceDefending = true;

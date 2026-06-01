@@ -12,6 +12,7 @@ public:
     MinionEnemy(QString spritePath, int frames, double speed, CopyAbility ab);
     void updateLogic() override;
     void reverseDirection() override;
+    bool isFacingRight() const { return facingRight; }
 
 private:
     int currentFrame = 0;

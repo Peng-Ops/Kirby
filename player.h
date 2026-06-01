@@ -70,6 +70,9 @@ public:
     int iceDefendCooldownTimer = 0;      // 防御冷却计时器 (10秒)
     void startIceDefend();               // 开始防御
     void endIceDefend();                 // 结束防御
+    bool inWater = false;       // 是否在水中
+    int stamina = 300;          // 水下体力值 (例如 300 帧大约 5 秒)
+    int maxStamina = 300;       // 最大体力值
     Enemy::CopyAbility currentForm = Enemy::NONE;     // 核心：当前卡比持有的形态能力（预留后续扩展空间）
 
     // 获取当前形态对应的元素属性
