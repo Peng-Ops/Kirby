@@ -2,11 +2,17 @@
 #include "ui_mainwindow.h"
 #include "basicenemy.h"
 #include <QPainter>
+#include <QStyleFactory>
+int originalSize = 24;
+int renderSize = originalSize * 2;
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    player = nullptr;
     this->resize(1000, 700);
 
     // 1. 场景
@@ -19,14 +25,42 @@ MainWindow::MainWindow(QWidget *parent)
     setCentralWidget(view);
 
     qreal sceneH = scene->sceneRect().height();
-
-    // 2. 四层天空背景（修改部分：记录到 backgroundLayers）
+    // 四层天空背景（修改部分：记录到 backgroundLayers）
     QStringList bgPaths = {
         ":/tu/Clouds 1/1.png",
         ":/tu/Clouds 1/2.png",
         ":/tu/Clouds 1/3.png",
         ":/tu/Clouds 1/4.png"
     };
+
+    // 切割方块素材
+    QPixmap tileSheet(":/tu/fangkuai.png");
+    grass        = tileSheet.copy(0, 0, originalSize, originalSize);
+    dirt         = tileSheet.copy(originalSize * 1, 0, originalSize, originalSize);
+    waterSurface = tileSheet.copy(originalSize * 2, 0, originalSize, originalSize);
+    QPixmap waterBody    = tileSheet.copy(originalSize * 3, 0, originalSize, originalSize);
+
+
+    // 加载冰块和碎石的素材
+    QPixmap iceBlock(":/tu/ice.png");
+    QPixmap rubble(":/tu/suishi.png");
+    // 加载五种刺的素材
+    QPixmap ci(":/tu/ci.png");
+    QPixmap ci2(":/tu/ci2.png");
+    QPixmap ci3(":/tu/ci3.png");
+    QPixmap qiangci(":/tu/qiangci.png");
+    QPixmap daoci(":/tu/daoci.png");
+    // ====== 新增：切割尾气素材（假设为横向两帧） ======
+    QPixmap weiqiSheet(":/tu/weiqi.png");
+
+    rubblePix = rubble.copy(0, 0, originalSize, originalSize);
+    ciPix = ci.copy(originalSize - 7, originalSize * 2 + 3, originalSize, originalSize * 2);
+    ci2Pix = ci2.copy(originalSize / 2.0, 0, originalSize, originalSize);
+    ci3Pix = ci3.copy(originalSize - 5, originalSize / 4.0 + 4, originalSize, originalSize);
+    qiangciPix = qiangci.copy(originalSize / 2.0, originalSize / 2.0, originalSize, originalSize * 4);
+    daociPix = daoci.copy(originalSize / 2.0, originalSize / 2.0, originalSize * 4, originalSize);
+    waterBodyPix = tileSheet.copy(originalSize * 3, 0, originalSize, originalSize);
+    iceBlockPix = iceBlock.copy(0, 0, originalSize, originalSize);
 
     for(int i = 0; i < bgPaths.size(); ++i) {
         QPixmap pix(bgPaths[i]);
@@ -45,28 +79,6 @@ MainWindow::MainWindow(QWidget *parent)
         }
     }
 
-    // 3. 切割方块素材 (保持不变)
-    QPixmap tileSheet(":/tu/fangkuai.png");
-    int originalSize = 24;
-    QPixmap grass        = tileSheet.copy(0, 0, originalSize, originalSize);
-    QPixmap dirt         = tileSheet.copy(originalSize * 1, 0, originalSize, originalSize);
-    QPixmap waterSurface = tileSheet.copy(originalSize * 2, 0, originalSize, originalSize);
-    QPixmap waterBody    = tileSheet.copy(originalSize * 3, 0, originalSize, originalSize);
-
-    // 存入类成员中，留作备用
-    waterBodyPix         = tileSheet.copy(originalSize * 3, 0, originalSize, originalSize);
-
-    // 加载冰块和碎石的素材
-    QPixmap iceBlockPix(":/tu/ice.png");
-    QPixmap rubblePix(":/tu/suishi.png");
-    // 加载五种刺的素材
-    QPixmap ciPix(":/tu/ci.png");
-    QPixmap ci2Pix(":/tu/ci2.png");
-    QPixmap ci3Pix(":/tu/ci3.png");
-    QPixmap qiangciPix(":/tu/qiangci.png");
-    QPixmap daociPix(":/tu/daoci.png");
-    // ====== 新增：切割尾气素材（假设为横向两帧） ======
-    QPixmap weiqiSheet(":/tu/weiqi.png");
     if (!weiqiSheet.isNull()) {
         int count = 2;
         int fw = weiqiSheet.width() / count;
@@ -75,24 +87,44 @@ MainWindow::MainWindow(QWidget *parent)
             weiqiFrames.push_back(weiqiSheet.copy(i * fw, 0, fw, fh));
         }
     }
+
+    // ====== 初始化体力条 ======
+    staminaBar = new QProgressBar(this);
+    staminaBar->setRange(0, 300);
+    staminaBar->setValue(300);
+    staminaBar->setTextVisible(false);
+    staminaBar->setVisible(false);
+    staminaBar->setGeometry(20, 75, 175, 12);
+    staminaBar->setStyle(QStyleFactory::create("Fusion"));
+
+    // 使用 QSS 样式表美化：深灰色背景 + 亮蓝色进度条
+    staminaBar->setStyleSheet(
+        "QProgressBar {"
+        "   border: 2px solid #333;"
+        "   border-radius: 3px;"
+        "   background-color: #222;" /* 没体力时的黑色背景 */
+        "}"
+        "QProgressBar::chunk {"
+        "   background-color: #00aaff;" /* 有体力时的纯蓝色块，无渐变 */
+        "}"
+        );
+
     // 4. 关卡矩阵 (保持不变，确保地图长度足够)
     QStringList levelData = {
-        ".................................................................66.........................", // 1
-        ".................................................................66.........................", // 2 碎石高墙顶部
-        "...........................................1111..................66.........................", // 3 高空浮岛（草地）
-        "...........................................2222..................66.....................P...", // 4 高空浮岛（泥土）
-        ".....................................................F...........66..................2222222", // 5 悬空冰块阶梯 1
-        "...................................................5555..........66..................2222222", // 6
-        ".................................................................66..................2222222", // 7 悬空冰块阶梯 2 -> 右侧高台有检查点 C
-        "...............................................55................66..................2222222", // 8 终点前的高台
-        ".........................W.......................................66..........L.......2222222", // 9 出生点草地
-        ".......................1111.....I...333333333....................22222....1111111....2222222", // 10 坑底：铺满地刺或水体
-        "..................P....2222111111111444444444.C..G....F.F.I......2222288882222222....2222222", // 11 底部支撑
-        "11111111111111111111111222222222222244444444411111111166666111111222221111222222211112222222",
-        "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+        ".......................",
+        ".......................",
+        ".......................",
+        ".......................",
+        ".......................",
+        ".......................",
+        ".......................",
+        ".......................",
+        ".......................",
+        "11111111111111111111111",
+        "22222222222222222222222",
+
     };
 
-    int renderSize = originalSize * 2;
     int totalMapHeight = levelData.size() * renderSize;
     int bottomOffset = sceneH - totalMapHeight;
 
@@ -100,81 +132,17 @@ MainWindow::MainWindow(QWidget *parent)
         for (int c = 0; c < levelData[r].length(); c++) {
             Tile *tile = nullptr;
             char type = levelData[r][c].toLatin1();
-            if (type == 'I') {
-                MinionEnemy* iceEnemy = new MinionEnemy(":/tu/Ice_Dude.png", 6, 1.2, Enemy::ICE);
-                iceEnemy->setScale(0.6);
-                iceEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                iceEnemy->setVisible(false);
-                scene->addItem(iceEnemy);
-                enemies.append(iceEnemy);
-                continue;
-            }
-
-            // ====== 2. 【新增】处理带火能力的小怪物 F ======
-            else if (type == 'F') {
-                MinionEnemy* fireEnemy = new MinionEnemy(":/tu/fire_enemy.png", 5, 1.5, Enemy::FIRE);
-                fireEnemy->setScale(2);
-                fireEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                fireEnemy->setVisible(false);
-                scene->addItem(fireEnemy);
-                enemies.append(fireEnemy);
-                continue;
-            }
-            else if (type == 'G'){
-                MinionEnemy* leafEnemy = new MinionEnemy(":/tu/Leaf_Dude.png", 8, 1.0, Enemy::LEAF);
-                leafEnemy->setScale(0.6);
-                leafEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                leafEnemy->setVisible(false);
-                scene->addItem(leafEnemy);
-                enemies.append(leafEnemy);
-                continue;
-            }
-            else if (type == 'L'){
-                MinionEnemy* lightningEnemy = new MinionEnemy(":/tu/Lightning_Dude.png", 6, 1.8, Enemy::SPARK);
-                lightningEnemy->setScale(0.6);
-                lightningEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                lightningEnemy->setVisible(false);
-                scene->addItem(lightningEnemy);
-                enemies.append(lightningEnemy);
-                continue;
-            }
-            else if (type == '1')  tile = new Tile(Tile::Grass, grass);
+            if (type == '1')  tile = new Tile(Tile::Grass, grass);
             else if (type == '2')  tile = new Tile(Tile::Dirt, dirt);
             else if (type == '3')  tile = new Tile(Tile::WaterSurface, waterSurface);
             else if (type == '4')  tile = new Tile(Tile::WaterBody, waterBody);
             else if (type == '5')  tile = new Tile(Tile::IceBlock, iceBlockPix);
-            else if (type == '6')  tile = new Tile(Tile::RubbleBlock, rubblePix);
-            else if (type == '7')  tile = new Tile(Tile::Spike, ciPix);
-            else if (type == '8')  tile = new Tile(Tile::Spike, ci2Pix);
-            else if (type == '9')  tile = new Tile(Tile::Spike, ci3Pix);
-            else if (type == 'A')  tile = new Tile(Tile::Spike, qiangciPix);
-            else if (type == 'B')  tile = new Tile(Tile::Spike, daociPix);
-            else if (type == 'C'){
-                Cake* cake = new Cake();
-                cake->setPos(c * renderSize, r * renderSize + bottomOffset);
-                cake->setVisible(false);
-                scene->addItem(cake);
-                cakes.append(cake);
-            }
-            else if (type == 'P') {
-                Checkpoint* cp = new Checkpoint();
-                // 采用跟你地形一模一样的坐标计算公式和缩放
-                cp->setPos(c * renderSize, r * renderSize + bottomOffset - 30);
-                cp->setScale(2.0);
-                cp->setVisible(false);
-                scene->addItem(cp);
-                checkpoints.append(cp); // 塞进主循环检测的检查点列表
-                continue; // 检查点处理完，直接跳过下面的 tile 判定
-            }
             if (tile) {
                 tile->setPos(c * renderSize, r * renderSize + bottomOffset);
                 tile->setScale(2.0);
                 scene->addItem(tile);
                 if (type == '1' || type == '2' || type == '5' || type == '6') floors.append(tile);
-                if (type == '7' || type == '8' || type == '9' || type == 'A' || type == 'B') {
-                    floors.append(tile);  // 刺也能站上去（物理碰撞）
-                    spikes.append(tile);  // 但对玩家造成伤害
-                }
+                else if (type == '3' || type == '4') waters.append(tile);
             }
         }
     }
@@ -211,7 +179,7 @@ MainWindow::MainWindow(QWidget *parent)
         scene->addItem(x);
         enemies.append(x);
     }
-    iceGod->pendingXuehuas.clear();*/
+    iceGod->pendingXuehuas.clear();
 
     // Boss血条
     bossHpBarBg = new QGraphicsRectItem(0, 0, 100, 8);
@@ -226,11 +194,7 @@ MainWindow::MainWindow(QWidget *parent)
     bossHpBarFg->setPen(Qt::NoPen);
     bossHpBarFg->setZValue(2001);
     bossHpBarFg->setVisible(false);
-    scene->addItem(bossHpBarFg);
-
-    // 6. 游戏循环
-    timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &MainWindow::gameUpdate);
+    scene->addItem(bossHpBarFg);*/
 
     //初始化生命值 HUD 图标
     QPixmap lifePix(":/tu/life.png");
@@ -249,28 +213,6 @@ MainWindow::MainWindow(QWidget *parent)
     cooldownText->setZValue(2000);
     cooldownText->setVisible(false);
     scene->addItem(cooldownText);
-
-    /*// ====== 放置检查点 ======
-    Checkpoint* cp1 = new Checkpoint();
-    cp1->setPos(600, 800);
-    cp1->setVisible(false);
-    cp1->setScale(2.0);
-    scene->addItem(cp1);
-    checkpoints.append(cp1);
-
-    Checkpoint* cp2 = new Checkpoint();
-    cp2->setPos(1800, 800);
-    cp2->setVisible(false);
-    cp2->setScale(2.0);
-    scene->addItem(cp2);
-    checkpoints.append(cp2);
-
-    Checkpoint* cp3 = new Checkpoint();
-    cp3->setPos(3200, 800);
-    cp3->setVisible(false);
-    cp3->setScale(2.0);
-    scene->addItem(cp3);
-    checkpoints.append(cp3);*/
 
     // 初始复活位置 = 卡比出生点
     lastCheckpointPos = QPointF(800, 856);
@@ -304,18 +246,185 @@ MainWindow::MainWindow(QWidget *parent)
 }
 MainWindow::~MainWindow() { delete ui; }
 
+void MainWindow::loadLevel(int levelNum) {
+    // ================== 1. 安全清理上一关残留的物体 ==================
+
+    // A. 清理怪物
+    for (Enemy* t : enemies) { scene->removeItem(t); delete t; }
+    enemies.clear();
+
+    // B. 清理水体
+    for (Tile* t : waters) { scene->removeItem(t); delete t; }
+    waters.clear();
+
+    // C. 清理地板（注意：这里已经把普通方块和地刺全部 delete 销毁了！）
+    for (Tile* t : floors) { scene->removeItem(t); delete t; }
+    floors.clear();
+
+    // D. 【核心修正】：因为地刺在上面 floors 循环里已经被销毁了，
+    // 这里绝对不能再 delete t！只需要清空指针列表即可！
+    spikes.clear();
+
+    // E. 清理上关遗留的蛋糕（防止遗漏内存泄漏）
+    for (Cake* c : cakes) { scene->removeItem(c); delete c; }
+    cakes.clear();
+
+    // F. 清理上关遗留的检查点（防止遗漏内存泄漏）
+    for (Checkpoint* cp : checkpoints) { scene->removeItem(cp); delete cp; }
+    checkpoints.clear();
+
+    // G. 安全删除玩家
+    if (player != nullptr) {
+        scene->removeItem(player);
+        delete player;
+        player = nullptr; // 销毁后立刻置空
+    }
+
+    if (!scene) return; // 安全检查
+    qreal sceneH = scene->sceneRect().height();
+
+    // 2. 根据关卡数，选择不同的矩阵
+    QStringList levelData;
+    if (levelNum == 1) {
+        levelData = {
+            ".................................................................66.........................", // 1
+            ".................................................................66.........................", // 2 碎石高墙顶部
+            "...........................................1111..................66.........................", // 3 高空浮岛（草地）
+            "...........................................2222..................66.....................P...", // 4 高空浮岛（泥土）
+            "...........................................7777......F...........66..................2222222", // 5 悬空冰块阶梯 1
+            "...................................................5555..........66..................2222222", // 6
+            ".................................................................66..................2222222", // 7 悬空冰块阶梯 2 -> 右侧高台有检查点 C
+            "...............................................55................66..................2222222", // 8 终点前的高台
+            ".........................C.......................................66..................2222222", // 9 出生点草地
+            ".......................11119....I...333333333....................22222.......L.......2222222", // 10 坑底：铺满地刺或水体
+            "..................P....2222111111111444444444.C..F.....G..F..I...22222....1111111....2222222", // 11 底部支撑
+            "11111111111111111111111222222222222244444444411111111166666111111222228888222222211112222222",
+            "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+        };
+    } else if (levelNum == 2) {
+        levelData = {
+            "...................C......",
+            "111111.....5555....6666...", // 第二关加点冰块和火怪
+            "222222.....2222....2222..."
+        };
+    } else if (levelNum == 3) {
+        levelData = {
+            ".........333333........C..", // 第三关全是水
+            "111111...444444...1111111.",
+            "222222...222222...2222222."
+        };
+    }
+
+    int totalMapHeight = levelData.size() * renderSize;
+    int bottomOffset = sceneH - totalMapHeight;
+
+    for (int r = 0; r < levelData.size(); r++) {
+        for (int c = 0; c < levelData[r].length(); c++) {
+            Tile *tile = nullptr;
+            char type = levelData[r][c].toLatin1();
+            if (type == 'I') {
+                MinionEnemy* iceEnemy = new MinionEnemy(":/tu/Ice_Dude.png", 6, 1.2, Enemy::ICE);
+                iceEnemy->setScale(0.6);
+                iceEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
+                //iceEnemy->setVisible(false);
+                scene->addItem(iceEnemy);
+                enemies.append(iceEnemy);
+                continue;
+            }
+
+            // ====== 2. 【新增】处理带火能力的小怪物 F ======
+            else if (type == 'F') {
+                MinionEnemy* fireEnemy = new MinionEnemy(":/tu/fire_enemy.png", 5, 1.5, Enemy::FIRE);
+                fireEnemy->setScale(2);
+                fireEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
+                //fireEnemy->setVisible(false);
+                scene->addItem(fireEnemy);
+                enemies.append(fireEnemy);
+                continue;
+            }
+            else if (type == 'G'){
+                MinionEnemy* leafEnemy = new MinionEnemy(":/tu/Leaf_Dude.png", 8, 1.0, Enemy::LEAF);
+                leafEnemy->setScale(0.6);
+                leafEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
+                //leafEnemy->setVisible(false);
+                scene->addItem(leafEnemy);
+                enemies.append(leafEnemy);
+                continue;
+            }
+            else if (type == 'L'){
+                MinionEnemy* lightningEnemy = new MinionEnemy(":/tu/Lightning_Dude.png", 6, 1.8, Enemy::SPARK);
+                lightningEnemy->setScale(0.6);
+                lightningEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
+                //lightningEnemy->setVisible(false);
+                scene->addItem(lightningEnemy);
+                enemies.append(lightningEnemy);
+                continue;
+            }
+            else if (type == '1')  tile = new Tile(Tile::Grass, grass);
+            else if (type == '2')  tile = new Tile(Tile::Dirt, dirt);
+            else if (type == '3')  tile = new Tile(Tile::WaterSurface, waterSurface);
+            else if (type == '4')  tile = new Tile(Tile::WaterBody, waterBodyPix);
+            else if (type == '5')  tile = new Tile(Tile::IceBlock, iceBlockPix);
+            else if (type == '6')  tile = new Tile(Tile::RubbleBlock, rubblePix);
+            else if (type == '7')  tile = new Tile(Tile::Spike, ciPix);
+            else if (type == '8')  tile = new Tile(Tile::Spike, ci2Pix);
+            else if (type == '9')  tile = new Tile(Tile::Spike, ci3Pix);
+            else if (type == 'A')  tile = new Tile(Tile::Spike, qiangciPix);
+            else if (type == 'B')  tile = new Tile(Tile::Spike, daociPix);
+            else if (type == 'C'){
+                Cake* cake = new Cake();
+                cake->setPos(c * renderSize, r * renderSize + bottomOffset);
+                //cake->setVisible(false);
+                scene->addItem(cake);
+                cakes.append(cake);
+            }
+            else if (type == 'P') {
+                Checkpoint* cp = new Checkpoint();
+                // 采用跟你地形一模一样的坐标计算公式和缩放
+                cp->setPos(c * renderSize, r * renderSize + bottomOffset - 30);
+                cp->setScale(2.0);
+                //cp->setVisible(false);
+                scene->addItem(cp);
+                checkpoints.append(cp); // 塞进主循环检测的检查点列表
+                continue; // 检查点处理完，直接跳过下面的 tile 判定
+            }
+            if (tile) {
+                tile->setPos(c * renderSize, r * renderSize + bottomOffset);
+                tile->setScale(2.0);
+                scene->addItem(tile);
+                if (type == '1' || type == '2' || type == '5' || type == '6') floors.append(tile);
+                else if (type == '3' || type == '4') waters.append(tile);
+                if (type == '7' || type == '8' || type == '9' || type == 'A' || type == 'B') {
+                    floors.append(tile);  // 刺也能站上去（物理碰撞）
+                    spikes.append(tile);  // 但对玩家造成伤害
+                }
+            }
+        }
+    }
+
+    // 4. 重生卡比
+    player = new Player();
+    player->setPos(800, 856);
+    scene->addItem(player);
+    lastCheckpointPos = QPointF(800, 856);
+    // 5. 切换 UI 状态 (隐藏菜单字，显示 HUD)
+    if (titleText) titleText->setVisible(false);
+    if (hintText)  hintText->setVisible(false);
+    staminaBar->setVisible(true);
+    for (auto icon : lifeIcons) icon->setVisible(true);
+
+    // 6. 状态机切换与启动
+    currentState = PLAYING;
+    timer->start(16);
+}
+
 void MainWindow::keyPressEvent(QKeyEvent *event) {
     if (currentState == START_SCREEN) {
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
             enterPressed = true;
-            /*currentState = INTRO_PAN;
-            if (titleText) { scene->removeItem(titleText); delete titleText; titleText = nullptr; }
-            if (hintText) { scene->removeItem(hintText); delete hintText; hintText = nullptr; }*/
         }
         return;
     }
-
-    if (currentState == INTRO_PAN) return; // 动画期间拦截所有按键
 
     if (event->isAutoRepeat()) return;
     if (player->isDigesting) {
@@ -448,6 +557,29 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
     if (keys.contains(Qt::Key_J) && player->currentForm == Enemy::ICE && player->iceDefendCooldownTimer <= 0) {
         if (!player->isRolling && !player->isSwallowing && !player->isDigesting && !player->isSpitting && !player->isIceDefending) {
             player->startIceDefend();
+            // 2. 构造一个探测矩形：左右各扩展 3 个方块，上下扩展半个方块（限定同一高度）
+            int range = 3 * renderSize;
+            QRectF freezeBox = player->sceneBoundingRect().adjusted(-range, -renderSize/2, range, renderSize/2);
+
+            // 3. 获取在这个区域内的所有物品
+            QList<QGraphicsItem*> itemsInBox = scene->items(freezeBox);
+
+            for (QGraphicsItem* item : itemsInBox) {
+                Tile* tile = dynamic_cast<Tile*>(item);
+                if (tile && (tile->tileType() == Tile::WaterSurface || tile->tileType() == Tile::WaterBody)) {
+
+                    // 严格过滤：只冻结与卡比几乎在同一高度的水
+                    if (abs(tile->y() - player->y()) - 10 < renderSize) {
+                        // 将水变成冰块！
+                        tile->changeType(Tile::IceBlock, iceBlockPix); // 调用你现有的切换材质函数
+
+                        // 关键点：如果是新生成的实体冰块，记得加入碰撞地板列表
+                        if (!floors.contains(tile)) {
+                            floors.append(tile);
+                        }
+                    }
+                }
+            }
         }
     } else if (!keys.contains(Qt::Key_J) && player->isIceDefending) {
         // 松开 J 键时，立刻解除防御状态并开始 10 秒冷却
@@ -465,15 +597,25 @@ void MainWindow::gameUpdate() {
     // 阶段一：静止的开始界面
     if (currentState == START_SCREEN) {
         if (enterPressed) {
-            player->vx = 0; // 左右停住，不让它乱跑
-
-            // 物理系统会自动让它下落，一旦碰撞检测判定它踩地了
-            if (player->isOnGround) {
+            player->vx = 0;
+            if (player->isOnGround){
                 enterPressed = false;      // 重置标记
                 if (titleText) { scene->removeItem(titleText); delete titleText; titleText = nullptr; }
                 if (hintText) { scene->removeItem(hintText); delete hintText; hintText = nullptr; }
-                currentState = INTRO_PAN;     // 【关键】此时才真正切换到屏幕滑动状态
+                // 进入【选关界面】
+                currentState = LevelSelect;
+
+                // 刷新屏幕上的文字提示
+                menuText = new QGraphicsTextItem("\t SELECT LEVEL:\n\nPress [ 1 ] for Level 1\nPress [ 2 ] for Level 2\nPress [ 3 ] for Level 3");
+                menuText->setFont(QFont("SimHei", 24, QFont::Bold));
+                menuText->setDefaultTextColor(Qt::white);
+                menuText->setZValue(2000);
+                menuText->setPos(300, 580); // 回到屏幕中央上方
+                scene->addItem(menuText);
+                return;
             }
+
+
         }
         // 情况 B：正常挂机状态，卡比随节拍随机乱动
         else {
@@ -549,8 +691,26 @@ void MainWindow::gameUpdate() {
         }
         return;
     }
+    if (currentState == LevelSelect) {
+        if (keys.contains(Qt::Key_1)) {
+            currentState = PLAYING;
+            menuText->setVisible(false); // 隐藏菜单文字
+            loadLevel(1);                // 加载第一关
+        }
+        else if (keys.contains(Qt::Key_2)) {
+            currentState = PLAYING;
+            menuText->setVisible(false);
+            loadLevel(2);                // 加载第二关
+        }
+        else if (keys.contains(Qt::Key_3)) {
+            currentState = PLAYING;
+            menuText->setVisible(false);
+            loadLevel(3);                // 加载第三关
+        }
+        return; // 拦截
+    }
     // 阶段二：按下回车，卡比和地面一起左移
-    if (currentState == INTRO_PAN) {
+    /*if (currentState == PLAYING) {
         for (Enemy* e : enemies) e->setVisible(true);
         for (Cake* c : cakes) c->setVisible(true);
         for (Checkpoint* cp : checkpoints) cp->setVisible(true);
@@ -561,6 +721,9 @@ void MainWindow::gameUpdate() {
 
         // 👇 核心修改 1：地板、怪物和道具一起跟着向左平移，保持相对地图的绝对位置
         for (Tile* tile : floors) {
+            tile->setPos(tile->x() - moveSpeed, tile->y());
+        }
+        for (Tile* tile : waters) {
             tile->setPos(tile->x() - moveSpeed, tile->y());
         }
         for (Enemy* e : enemies) {
@@ -579,6 +742,9 @@ void MainWindow::gameUpdate() {
             for (Tile* tile : floors) {
                 tile->setPos(tile->x() + errorX, tile->y());
             }
+            for (Tile* tile : waters) {
+                tile->setPos(tile->x() + errorX, tile->y());
+            }
             for (Enemy* e : enemies) {
                 e->setPos(e->x() + errorX, e->y());
             }
@@ -589,8 +755,10 @@ void MainWindow::gameUpdate() {
 
             // 切换状态，唤醒所有元素
             currentState = PLAYING;
+            staminaBar->setVisible(true);
 
         }
+        staminaBar->setVisible(true);
 
         player->updateLogic();
         view->centerOn(500, 900);
@@ -598,7 +766,7 @@ void MainWindow::gameUpdate() {
             bg->setPos(500 - bg->rect().width() / 2.0, 0);
         }
         return;
-    }
+    }*/
 
     // ====== L键长按：吞噬 vs 取消形态 ======
     if (keys.contains(Qt::Key_L) && player->currentForm == Enemy::NONE && player->isOnGround && !player->isFatty && !player->isRolling && !player->isAttacking && !player->isDigesting && !player->isSpitting) {
@@ -752,14 +920,77 @@ void MainWindow::gameUpdate() {
         player->isHovering = (keys.contains(Qt::Key_W) || keys.contains(Qt::Key_Up))
         && !player->isRolling && !player->isSwallowing;
     }
+    // ====== 1. 先检测是否在水中 ======
+    player->inWater = false;
+    Tile* currentSurface = nullptr;
+\
+    for (Tile* tile : waters) { // 如果你没有 waters 列表，可以遍历包含水的列表
+        if (player->sceneBoundingRect().intersects(tile->sceneBoundingRect())) {
+            player->inWater = true;
+            if (tile->tileType() == Tile::WaterSurface) {
+                currentSurface = tile; // 记录接触到的水面
+            }
+            break;
+        }
+    }
 
-    if (!player->isOnGround&& !player->isLightningFlying) {
+    // ====== 2. 水下物理与操作 ======
+    if (player->inWater) {
+        player->stamina-=0.5;
+        // 1. 缓慢下沉 (替代原本的重力加速)
+        player->vy += 0.2; // 比空气中重力加得慢
+        if (player->vy > 2) player->vy = 2; // 水中最大下落速度被限制
+
+        // 2. 按W键上浮
+        if (keys.contains(Qt::Key_W)) {
+            player->vy = -3.0; // 给予向上的速度
+        }
+
+        // 3. 水面悬浮判定 (半个身子在水外)
+        if (currentSurface != nullptr) {
+            double halfBodyY = player->y() + player->sceneBoundingRect().height() / 2.0;
+            // 如果卡比的半腰高过了水面，且正在往上游
+            if (halfBodyY < currentSurface->y() && player->vy < 0) {
+                player->setY(currentSurface->y() - player->sceneBoundingRect().height() / 2.0);
+                player->vy = 0; // 顶住水面，不再上升
+            }
+        }
+
+        // 4. 水下移动扣除体力
+        if (keys.contains(Qt::Key_W) || keys.contains(Qt::Key_A) || keys.contains(Qt::Key_D)) {
+            player->stamina-=1.5;
+            if (player->stamina <= 0) {
+                player->hp = 0;
+            }
+        }
+    }
+    else if (!player->isOnGround&& !player->isLightningFlying) {
         if (player->isHovering && player->vy > 0) {
             player->vy += 0.1;
             if (player->vy > 2.5) player->vy = 2.5;
         } else {
             player->vy += 0.8;
             if (player->vy > 15) player->vy = 15;
+        }
+    }
+    if(!player->inWater){
+        if (player->stamina < player->maxStamina) {
+            player->stamina += 4;
+
+            if (player->stamina > player->maxStamina) {
+                player->stamina = player->maxStamina;
+            }
+        }
+    }
+
+    if (staminaBar) {
+        staminaBar->setValue(player->stamina);
+
+        // 【细节优化】：如果体力满了，可以隐藏体力条；不满时再显示，让画面更干净
+        if (player->stamina >= player->maxStamina) {
+            staminaBar->setVisible(false); // 满体力隐藏
+        } else {
+            staminaBar->setVisible(true);  // 消耗体力时显现
         }
     }
 
@@ -790,6 +1021,19 @@ void MainWindow::gameUpdate() {
     // 4. 水平移动 + 碰撞
     player->setPos(player->x() + player->vx, player->y());
 
+    player->inWater = false;
+    currentSurface = nullptr;
+
+    // 假设水方块存在一个 waters 列表里，或者你遍历所有场景物品
+    for (Tile* tile : waters) { // 如果你没有 waters 列表，可以遍历包含水的列表
+        if (player->sceneBoundingRect().intersects(tile->sceneBoundingRect())) {
+            player->inWater = true;
+            if (tile->tileType() == Tile::WaterSurface) {
+                currentSurface = tile; // 记录接触到的水面
+            }
+            break;
+        }
+    }
     // 替换原有的 constFloors 遍历为倒序遍历
     for (int i = floors.size() - 1; i >= 0; i--) {
         Tile *tile = floors[i];
@@ -800,6 +1044,7 @@ void MainWindow::gameUpdate() {
                 if (tile->tileType() == Tile::IceBlock) {
                     // 火融冰：改变地形贴图，由于是水了，不产生物理阻挡，直接 continue
                     tile->changeType(Tile::WaterBody, waterBodyPix);
+                    waters.append(tile);
                     floors.removeAt(i);
                     continue;
                 }
@@ -813,6 +1058,17 @@ void MainWindow::gameUpdate() {
                 }
             }
 
+            /*if (player->inWater) {
+                // 比较砖块的顶端 Y 坐标 和 玩家的底端 Y 坐标
+                double tileTop = tile->sceneBoundingRect().top();
+
+                // 如果砖块顶端和卡比脚底的高度差在一定范围内（比如一格以内）
+                if (tileTop + renderSize >= player->y()) {
+                    // 允许爬上去：强行把卡比拔高到砖块上
+                    player->setY(tileTop - player->sceneBoundingRect().height());
+                    continue; // 跳过撞墙阻挡，让玩家顺利前移
+                }
+            }*/
             // 正常的物理阻挡逻辑
             QRectF tRect = tile->sceneBoundingRect();
             if (player->vx > 0) {
@@ -839,6 +1095,7 @@ void MainWindow::gameUpdate() {
                 if (tile->tileType() == Tile::IceBlock) {
                     // 火融冰：改变地形贴图并移除物理体积
                     tile->changeType(Tile::WaterBody, waterBodyPix);
+                    waters.append(tile);
                     floors.removeAt(i);
                     continue;
                 } else if (tile->tileType() == Tile::RubbleBlock) {
@@ -873,6 +1130,7 @@ void MainWindow::gameUpdate() {
                 if (player->isFireSprinting) {
                     if (tile->tileType() == Tile::IceBlock) {
                         tile->changeType(Tile::WaterBody, waterBodyPix);
+                        waters.append(tile);
                         floors.removeAt(i);
                         continue;
                     } else if (tile->tileType() == Tile::RubbleBlock) {
@@ -928,52 +1186,7 @@ void MainWindow::gameUpdate() {
         // 2. 水平移动与墙壁碰撞（Boss无视地形）
         enemy->setPos(enemy->x() + enemy->vx, enemy->y());
         if (!enemy->ignoresTiles) {
-            /*double nextX = enemy->x() + enemy->vx;
-            double currentY = enemy->y();
-
-            double width = enemy->sceneBoundingRect().width();
-            double height = enemy->sceneBoundingRect().height();
-
-            // 2. 预测探测点的位置
-            // 如果向右走，探测点在身体右侧外一点；向左走，在左侧外一点
-            double probeX = (enemy->vx > 0) ? (nextX + width + 5) : (nextX - 5);
-
-            // 墙壁探测点（身体中部高度）
-            QPointF wallProbe(probeX, enemy->y() + height / 2.0);
-            // 悬崖/边缘探测点（脚底下方向前延伸）
-            QPointF cliffProbe(probeX, enemy->y() + height + 10);
-
-            bool hasWallAhead = false;
-            bool hasGroundAhead = false;
-
-            QRectF eRect = enemy->sceneBoundingRect();
-            // 3. 遍历地板进行前瞻判定
-            for (Tile* tile : floors) {
-                QRectF tRect = tile->sceneBoundingRect();
-
-                // 检测前方是不是撞墙
-                if (tRect.contains(wallProbe)) {
-                    hasWallAhead = true;
-                }
-                // 检测前方斜下方是不是还有立足点
-                if (tRect.contains(cliffProbe)) {
-                    hasGroundAhead = true;
-                }
-                if (hasWallAhead || !hasGroundAhead) {
-                    if (enemy->vx > 0) {
-                        enemy->setPos(tRect.left() - eRect.width(), enemy->y());
-                    } else if (enemy->vx < 0) {
-                        enemy->setPos(tRect.right(), enemy->y());
-                    }
-                    // 撞墙后掉头
-                    enemy->reverseDirection();
-                    break;
-                    return;
-                }
-            }*/
-
             // 4. 核心逻辑：撞墙，或者前方是悬崖（没地了），立刻掉头
-
             QRectF eRect = enemy->sceneBoundingRect();
             for (Tile *tile : floors) {
                 QRectF tRect = tile->sceneBoundingRect();
@@ -989,8 +1202,8 @@ void MainWindow::gameUpdate() {
                     break;
                 }
             }
-            qreal lookAheadX = (enemy->vx > 0) ? eRect.right() + 5 : eRect.left() - 5;
-            qreal footY = eRect.bottom() + 2; // 往脚底下偏离2个像素，确保能踩到地面
+            qreal lookAheadX = (enemy->vx > 0) ? eRect.right() + 7 : eRect.left() - 7;
+            qreal footY = eRect.bottom() + 5; // 往脚底下偏离2个像素，确保能踩到地面
             QPointF checkPoint(lookAheadX, footY);
 
             bool hasFloorAhead = false;
@@ -1172,6 +1385,13 @@ void MainWindow::gameUpdate() {
         // 2. 新增：检测是否撞到实体方块
         if (!hitEnemy) { // 如果已经打中敌人了，就不需要再检测撞墙了
             for (Tile *tile : floors) {
+                // 只要子弹碰到了 floors 列表里的方块（实体墙、草地、石头等）
+                if (proj->collidesWithItem(tile)) {
+                    hitWall = true;
+                    break;
+                }
+            }
+            for (Tile *tile : waters) {
                 // 只要子弹碰到了 floors 列表里的方块（实体墙、草地、石头等）
                 if (proj->collidesWithItem(tile)) {
                     hitWall = true;

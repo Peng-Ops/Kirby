@@ -11,6 +11,7 @@
 #include <QGraphicsTextItem>
 #include <QMediaPlayer>
 #include <QAudioOutput>
+#include <QProgressBar>
 #include "player.h"
 #include "tile.h"
 #include "enemy.h"
@@ -40,16 +41,16 @@ private slots:
 
 private:
     QList<QGraphicsPixmapItem*> lifeIcons; // 存放生命值图标的列表
-    void loadLevel(int level);
     Ui::MainWindow *ui;
     QGraphicsScene *scene;
     QGraphicsView *view;
     QTimer *timer;
     Player *player;
-    QPixmap waterBodyPix; // 新增：保存水的贴图以备融冰之用
+    QPixmap grass, dirt, waterSurface, waterBodyPix, iceBlockPix, rubblePix, ciPix, ci2Pix, ci3Pix, qiangciPix, daociPix;
     QList<QGraphicsRectItem*> backgroundLayers; // 新增：用于记录背景图层
     int lastHorizontalKey = 0;
     QList<Tile*> floors;
+    QList<Tile*> waters;
     QList<Tile*> spikes;  // 刺方块（对玩家造成伤害）
     QSet<int> keys;
     int jumpBuffer = 0;
@@ -73,11 +74,14 @@ private:
     QAudioOutput *audioOutput;
     int aiTimer = 0;
     bool enterPressed = false;
+    QProgressBar* staminaBar; // 新增体力条指针
 
     // ====== 新增：游戏状态机枚举与控制变量 ======
-    enum GameState { START_SCREEN, INTRO_PAN, PLAYING };
+    enum GameState { START_SCREEN, LevelSelect, INTRO_PAN, PLAYING };
     GameState currentState = START_SCREEN;
     int introTimer = 0;
+    void loadLevel(int levelNum); // 把你之前那一长串解析地图的代码，封装进这个函数
+    QGraphicsTextItem* menuText;  // 用于在屏幕上显示提示文字
 
     // UI文字元素
     QGraphicsTextItem* titleText = nullptr;
