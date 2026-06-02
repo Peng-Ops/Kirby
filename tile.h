@@ -5,7 +5,7 @@
 
 class Tile : public GameObject {
 public:
-    enum TileType { Grass, Dirt, WaterSurface, WaterBody, IceBlock, RubbleBlock, Spike };
+    enum TileType { Grass, Dirt, WaterSurface, WaterBody, IceBlock, RubbleBlock, Spike, AmbushSpike };
 
     Tile(TileType type, const QPixmap &pixmap);
 
@@ -26,6 +26,17 @@ public:
     bool originSet = false;      // 是否已记录原点
 
     void enableMove(MoveAxis axis, double speed, double range);
+
+    // 伏击刺专用
+    bool ambushArmed = false;
+    int ambushDelay = 0;
+    int ambushChargeTimer = 0;
+    qreal ambushHomeX = 0;
+    qreal ambushHomeY = 0;
+    int ambushDir = 1;          // 1=右, -1=左
+    qreal ambushMaxRange = 150;
+    bool ambushOriginSet = false;
+    void resetAmbush();
 
 private:
     TileType m_type;

@@ -3,6 +3,8 @@ QT       += core gui widgets multimedia
 
 # 包含你的所有代码文件
 SOURCES += \
+    apple.cpp \
+    goal.cpp \
     basicenemy.cpp \
     bossenemy.cpp \
     brainofcthulhu.cpp \
@@ -20,6 +22,8 @@ SOURCES += \
     xuehua.cpp
 
 HEADERS += \
+    apple.h \
+    goal.h \
     basicenemy.h \
     bossenemy.h \
     brainofcthulhu.h \

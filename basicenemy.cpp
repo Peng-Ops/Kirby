@@ -60,5 +60,6 @@ void MinionEnemy::updateLogic() {
 }
 void MinionEnemy::reverseDirection() {
     facingRight = !facingRight; // 翻转朝向
+    vx = facingRight ? walkSpeed : -walkSpeed; // 立刻同步物理速度，防止悬崖检测用过期方向
     patrolTimer = 0;            // 重点：无论是因为撞墙还是时间到了，掉头后都重新开始计时
 }

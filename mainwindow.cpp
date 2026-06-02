@@ -1,8 +1,10 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "basicenemy.h"
+#include "apple.h"
 #include <QPainter>
 #include <QStyleFactory>
+#include <QMouseEvent>
 int originalSize = 24;
 int renderSize = originalSize * 2;
 
@@ -22,6 +24,9 @@ MainWindow::MainWindow(QWidget *parent)
     view = new QGraphicsView(scene, this);
     view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff); // 固定高度通常不需要垂直滚动条
+    view->setMouseTracking(true);
+    view->viewport()->setMouseTracking(true);
+    view->installEventFilter(this);
     setCentralWidget(view);
 
     qreal sceneH = scene->sceneRect().height();
@@ -152,44 +157,15 @@ MainWindow::MainWindow(QWidget *parent)
     player->setPos(800, 856);
     scene->addItem(player);
 
-    //生成敌人！
-    /*// 猪鲨Boss
-    dukeFishron = new DukeFishron(player);
-    dukeFishron->setPos(3000, 400);
-    dukeFishron->setVisible(false);
-    scene->addItem(dukeFishron);
-    enemies.append(dukeFishron);
-
-    // 克苏鲁之脑Boss
-    brainOfCthulhu = new BrainOfCthulhu(player);
-    brainOfCthulhu->setPos(4200, 400);
-    brainOfCthulhu->setVisible(false);
-    scene->addItem(brainOfCthulhu);
-    enemies.append(brainOfCthulhu);
-
-    // 冰雪之神Boss
-    iceGod = new IceGod(player);
-    iceGod->setPos(3600, 400);
-    iceGod->setVisible(false);
-    scene->addItem(iceGod);
-    enemies.append(iceGod);
-    // 初始召唤4个雪花
-    iceGod->summonXuehuas(4);
-    for (Xuehua* x : iceGod->pendingXuehuas) {
-        scene->addItem(x);
-        enemies.append(x);
-    }
-    iceGod->pendingXuehuas.clear();
-
-    // Boss血条
-    bossHpBarBg = new QGraphicsRectItem(0, 0, 100, 8);
+    // Boss血条（始终存在，跨关卡复用）
+    bossHpBarBg = new QGraphicsRectItem(0, 0, 200, 10);
     bossHpBarBg->setBrush(QBrush(QColor(60, 60, 60)));
     bossHpBarBg->setPen(Qt::NoPen);
     bossHpBarBg->setZValue(2000);
     bossHpBarBg->setVisible(false);
     scene->addItem(bossHpBarBg);
 
-    bossHpBarFg = new QGraphicsRectItem(0, 0, 100, 8);
+    bossHpBarFg = new QGraphicsRectItem(0, 0, 200, 10);
     bossHpBarFg->setBrush(QBrush(QColor(220, 30, 30)));
     bossHpBarFg->setPen(Qt::NoPen);
     bossHpBarFg->setZValue(2001);
@@ -235,7 +211,7 @@ MainWindow::MainWindow(QWidget *parent)
     audioOutput = new QAudioOutput(this);
     bgmPlayer->setAudioOutput(audioOutput);
     bgmPlayer->setSource(QUrl("qrc:///tu/kerby theme music.mp3"));
-    audioOutput->setVolume(0.5); // 音量范围 0.0 到 1.0
+    audioOutput->setVolume(volumeLevel); // 音量范围 0.0 到 1.0
     bgmPlayer->setLoops(QMediaPlayer::Infinite); // 无限循环
     bgmPlayer->play();
 
@@ -247,6 +223,7 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() { delete ui; }
 
 void MainWindow::loadLevel(int levelNum) {
+    currentLevelNum = levelNum;
     // ================== 1. 安全清理上一关残留的物体 ==================
 
     // A. 清理怪物
@@ -273,7 +250,11 @@ void MainWindow::loadLevel(int levelNum) {
     for (Checkpoint* cp : checkpoints) { scene->removeItem(cp); delete cp; }
     checkpoints.clear();
 
-    // G. 安全删除玩家
+    // G. 清理上关遗留的终点
+    for (Goal* g : goals) { scene->removeItem(g); delete g; }
+    goals.clear();
+
+    // H. 安全删除玩家
     if (player != nullptr) {
         scene->removeItem(player);
         delete player;
@@ -419,6 +400,113 @@ void MainWindow::loadLevel(int levelNum) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
+    // ====== ESC暂停/恢复 ======
+    if (event->key() == Qt::Key_Escape && !event->isAutoRepeat()) {
+        if (currentState == PLAYING) {
+            timer->stop();
+            savedLevelNum = currentLevelNum;
+            savedCheckpointPos = lastCheckpointPos;
+            savedForm = player->currentForm;
+            savedHP = player->hp;
+            savedStamina = player->stamina;
+            savedAttackPowerTimer = player->attackPowerTimer;
+
+            qreal camX = player->x();
+            qreal camY = 850;
+            qreal vw = view->viewport()->width();
+            qreal vh = view->viewport()->height();
+
+            pauseOverlay = new QGraphicsRectItem(camX - vw/2.0, camY - vh/2.0, vw, vh);
+            pauseOverlay->setBrush(QBrush(QColor(0, 0, 0, 170)));
+            pauseOverlay->setPen(Qt::NoPen);
+            pauseOverlay->setZValue(2000);
+            scene->addItem(pauseOverlay);
+
+            pauseTitle = new QGraphicsTextItem("游戏暂停");
+            pauseTitle->setFont(QFont("SimHei", 40, QFont::Bold));
+            pauseTitle->setDefaultTextColor(Qt::white);
+            pauseTitle->setZValue(2001);
+            double tw = pauseTitle->boundingRect().width();
+            pauseTitle->setPos(camX - tw/2.0, camY - vh/3.0);
+            scene->addItem(pauseTitle);
+
+            qreal btnW = 260, btnH = 50;
+            qreal btnX = camX - btnW/2.0;
+            qreal btnY = camY - vh/6.0;
+
+            // 继续游戏按钮
+            QRectF contRect(btnX, btnY, btnW, btnH);
+            pauseBtnRects.append(contRect);
+            QGraphicsRectItem* cb = new QGraphicsRectItem(contRect);
+            cb->setBrush(QBrush(QColor(30, 80, 30, 200)));
+            cb->setPen(QPen(QColor(100, 200, 100), 2));
+            cb->setZValue(2001);
+            scene->addItem(cb);
+            pauseButtons.append(cb);
+            QGraphicsTextItem* ct = new QGraphicsTextItem("继续游戏");
+            ct->setFont(QFont("SimHei", 18, QFont::Bold));
+            ct->setDefaultTextColor(Qt::white);
+            ct->setZValue(2002);
+            ct->setPos(btnX + 60, btnY + 10);
+            scene->addItem(ct);
+            pauseButtonTexts.append(ct);
+
+            // 音量滑块
+            btnY += btnH + 30;
+            qreal trackW = btnW, trackH = 20;
+            volTrackRect = QRectF(btnX, btnY, trackW, trackH);
+            volTrackBg = new QGraphicsRectItem(volTrackRect);
+            volTrackBg->setBrush(QBrush(QColor(60, 60, 60)));
+            volTrackBg->setPen(QPen(QColor(120, 120, 120), 1));
+            volTrackBg->setZValue(2001);
+            scene->addItem(volTrackBg);
+            volTrackFg = new QGraphicsRectItem(btnX, btnY, trackW * volumeLevel, trackH);
+            volTrackFg->setBrush(QBrush(QColor(80, 160, 255)));
+            volTrackFg->setPen(Qt::NoPen);
+            volTrackFg->setZValue(2002);
+            scene->addItem(volTrackFg);
+            volHandle = new QGraphicsRectItem(btnX + trackW * volumeLevel - 4, btnY - 4, 12, trackH + 8);
+            volHandle->setBrush(QBrush(QColor(220, 220, 220)));
+            volHandle->setPen(QPen(Qt::white, 1));
+            volHandle->setZValue(2003);
+            scene->addItem(volHandle);
+
+            QGraphicsTextItem* vl = new QGraphicsTextItem("音量");
+            vl->setFont(QFont("SimHei", 14));
+            vl->setDefaultTextColor(QColor(180, 180, 180));
+            vl->setZValue(2002);
+            vl->setPos(btnX, btnY - 26);
+            scene->addItem(vl);
+            pauseButtonTexts.append(vl);
+
+            // 退出按钮
+            btnY += trackH + 30;
+            QRectF exitRect(btnX, btnY, btnW, btnH);
+            pauseBtnRects.append(exitRect);
+            QGraphicsRectItem* eb = new QGraphicsRectItem(exitRect);
+            eb->setBrush(QBrush(QColor(80, 30, 30, 200)));
+            eb->setPen(QPen(QColor(200, 100, 100), 2));
+            eb->setZValue(2001);
+            scene->addItem(eb);
+            pauseButtons.append(eb);
+            QGraphicsTextItem* et = new QGraphicsTextItem("退出至主菜单");
+            et->setFont(QFont("SimHei", 18, QFont::Bold));
+            et->setDefaultTextColor(Qt::white);
+            et->setZValue(2002);
+            et->setPos(btnX + 50, btnY + 10);
+            scene->addItem(et);
+            pauseButtonTexts.append(et);
+
+            currentState = PAUSED;
+            return;
+        } else if (currentState == PAUSED) {
+            cleanupPauseUI();
+            currentState = PLAYING;
+            timer->start(16);
+            return;
+        }
+    }
+
     if (currentState == START_SCREEN) {
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
             enterPressed = true;
@@ -444,7 +532,9 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
         if (event->key() != Qt::Key_L) return;
     }
 
-    keys.insert(event->key());
+    // 只在游戏和选关状态下记录按键，防止菜单状态下按键泄露
+    if (currentState == PLAYING || currentState == LevelSelect)
+        keys.insert(event->key());
 
     if (event->key() == Qt::Key_A || event->key() == Qt::Key_Left)
         lastHorizontalKey = event->key();
@@ -594,6 +684,87 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event) {
 }
 
 void MainWindow::gameUpdate() {
+    // ====== 处理待执行的状态转换动作（从eventFilter鼠标点击触发） ======
+    if (pendingAction != ACT_NONE) {
+        PendingAction act = pendingAction;
+        pendingAction = ACT_NONE; // 先清除，防止重入
+
+        switch (act) {
+        case ACT_SHOW_LEVEL_SELECT:
+            cleanupMainMenuUI();
+            showLevelSelect();
+            break;
+        case ACT_CONTINUE_GAME:
+            if (currentState == LevelSelect) {
+                cleanupSelectUI();
+            } else {
+                cleanupMainMenuUI();
+            }
+            currentState = PLAYING;
+            loadLevel(savedLevelNum);
+            player->setPos(savedCheckpointPos.x(), savedCheckpointPos.y());
+            player->hp = savedHP;
+            player->stamina = savedStamina;
+            player->currentForm = savedForm;
+            player->attackPowerTimer = savedAttackPowerTimer;
+            player->invulnTimer = 60;
+            lastCheckpointPos = savedCheckpointPos;
+            savedLevelNum = 0;
+            break;
+        case ACT_SHOW_SETTINGS:
+            cleanupMainMenuUI();
+            showSettings();
+            break;
+        case ACT_SHOW_MAIN_MENU:
+            if (currentState == SETTINGS)
+                cleanupSettingsUI();
+            else if (currentState == PAUSED) {
+                cleanupPauseUI();
+                cleanupGameObjects();
+            } else if (currentState == GAME_OVER) {
+                cleanupGameOverUI();
+                cleanupGameObjects();
+            }
+            showMainMenu();
+            break;
+        case ACT_RESUME_GAME:
+            cleanupPauseUI();
+            currentState = PLAYING;
+            timer->start(16);
+            break;
+        case ACT_RESTART_CHECKPOINT:
+            cleanupGameOverUI();
+            player->setPos(lastCheckpointPos.x(), lastCheckpointPos.y());
+            player->hp = 3;
+            player->invulnTimer = 60;
+            player->vy = 0;
+            player->vx = 0;
+            player->currentForm = Enemy::NONE;
+            player->isFatty = false;
+            player->attackPowerTimer = 0;
+            player->isAttacking = false;
+            player->isRolling = false;
+            player->isSwallowing = false;
+            player->isSpitting = false;
+            player->isDigesting = false;
+            player->isLeafSkill = false;
+            player->isLightningFlying = false;
+            player->isIceDefending = false;
+            player->isExploding = false;
+            player->isFireSprinting = false;
+            player->isHovering = false;
+            currentState = PLAYING;
+            timer->start(16);
+            break;
+        case ACT_EXIT:
+            this->close();
+            break;
+        default:
+            break;
+        }
+        return; // 动作执行后跳过本帧其余逻辑
+    }
+
     // 阶段一：静止的开始界面
     if (currentState == START_SCREEN) {
         if (enterPressed) {
@@ -1276,6 +1447,39 @@ void MainWindow::gameUpdate() {
         bg->setPos(bgX, 0);
     }
 
+    // ====== Boss动态生成（战斗关卡：玩家靠近末尾时创建Boss） ======
+    if (pendingBossType > 0 && !bossSpawned && player && player->x() > bossSpawnX - 300) {
+        if (pendingBossType == 1) {
+            brainOfCthulhu = new BrainOfCthulhu(player);
+            brainOfCthulhu->setPos(bossSpawnX, bossSpawnY);
+            brainOfCthulhu->setVisible(false);
+            scene->addItem(brainOfCthulhu);
+            enemies.append(brainOfCthulhu);
+        } else if (pendingBossType == 2) {
+            dukeFishron = new DukeFishron(player);
+            dukeFishron->setPos(bossSpawnX, bossSpawnY);
+            dukeFishron->setVisible(false);
+            scene->addItem(dukeFishron);
+            enemies.append(dukeFishron);
+        }
+        bossSpawned = true;
+    }
+
+    // ====== Boss接近激活 ======
+    const qreal bossActDist = 600;
+    if (brainOfCthulhu && !brainOfCthulhu->isDead && !brainOfCthulhu->isVisible()) {
+        if (qAbs(player->x() - brainOfCthulhu->x()) < bossActDist)
+            brainOfCthulhu->setVisible(true);
+    }
+    if (dukeFishron && !dukeFishron->isDead && !dukeFishron->isVisible()) {
+        if (qAbs(player->x() - dukeFishron->x()) < bossActDist)
+            dukeFishron->setVisible(true);
+    }
+    if (iceGod && !iceGod->isDead && !iceGod->isVisible()) {
+        if (qAbs(player->x() - iceGod->x()) < bossActDist)
+            iceGod->setVisible(true);
+    }
+
     // ====== Boss血条（屏幕右上角HUD） ======
     // 找到当前存活且可见的Boss（猪鲨或克苏鲁之脑）
     BossEnemy* activeBoss = nullptr;
@@ -1502,35 +1706,9 @@ void MainWindow::gameUpdate() {
         scene->addItem(gameOverText);
 
         QTimer::singleShot(1500, this, [this, gameOverText]() {
-            QMessageBox::StandardButton reply =
-                QMessageBox::question(this, "Game Over", "是否要复活？");
             scene->removeItem(gameOverText);
             delete gameOverText;
-
-            if (reply == QMessageBox::Yes) {
-                player->setPos(lastCheckpointPos.x(), lastCheckpointPos.y());
-                player->hp = 3;
-                player->invulnTimer = 60;
-                player->vy = 0;
-                player->vx = 0;
-                player->currentForm = Enemy::NONE;
-                player->isFatty = false;
-                player->attackPowerTimer = 0;
-                player->isAttacking = false;
-                player->isRolling = false;
-                player->isSwallowing = false;
-                player->isSpitting = false;
-                player->isDigesting = false;
-                player->isLeafSkill = false;
-                player->isLightningFlying = false;
-                player->isIceDefending = false;
-                player->isExploding = false;
-                player->isFireSprinting = false;
-                player->isHovering = false;
-                timer->start();
-            } else {
-                this->close();
-            }
+            showGameOver();
         });
         return;
     }
@@ -1541,6 +1719,30 @@ void MainWindow::gameUpdate() {
             cp->activate();
             lastCheckpointPos = cp->pos();
             hasCheckpoint = true;
+        }
+    }
+
+    // ====== 终点碰撞检测 ======
+    for (Goal* g : goals) {
+        if (!g->isReached && player->collidesWithItem(g)) {
+            g->isReached = true;
+            timer->stop();
+
+            QGraphicsTextItem* winText = new QGraphicsTextItem("MISSION ACCOMPLISHED!");
+            winText->setFont(QFont("SimHei", 36, QFont::Bold));
+            winText->setDefaultTextColor(QColor(255, 215, 0));
+            winText->setZValue(2000);
+            qreal tw = winText->boundingRect().width();
+            winText->setPos(player->x() - tw / 2.0, 400);
+            scene->addItem(winText);
+
+            QTimer::singleShot(2500, this, [this, winText]() {
+                scene->removeItem(winText);
+                delete winText;
+                cleanupGameObjects();
+                showMainMenu();
+            });
+            return;
         }
     }
 
@@ -1740,4 +1942,644 @@ void MainWindow::gameUpdate() {
             exhaustLifetimes.removeAt(i);
         }
     }
+}
+
+void MainWindow::mousePressEvent(QMouseEvent *event) { Q_UNUSED(event); }
+void MainWindow::mouseMoveEvent(QMouseEvent *event) { Q_UNUSED(event); }
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == view) {
+        if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
+            QMouseEvent* me = static_cast<QMouseEvent*>(event);
+            QPointF scenePos = view->mapToScene(me->pos());
+
+            // === 主菜单悬停/点击 ===
+            if (currentState == MAIN_MENU) {
+                for (int i = 0; i < mainMenuBtnRects.size() && i < mainMenuButtons.size(); i++) {
+                    bool inside = mainMenuBtnRects[i].contains(scenePos);
+                    QColor normal, hover;
+                    if (i == 0) {
+                        normal = QColor(30, 50, 90, 210); hover = QColor(50, 80, 150, 230);
+                    } else if (i == mainMenuBtnCount - 1) {
+                        normal = QColor(80, 25, 25, 210); hover = QColor(160, 50, 50, 230);
+                    } else {
+                        normal = QColor(60, 60, 60, 210); hover = QColor(100, 100, 100, 230);
+                    }
+                    mainMenuButtons[i]->setBrush(inside ? QBrush(hover) : QBrush(normal));
+                }
+                if (event->type() == QEvent::MouseButtonPress &&
+                    static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                    for (int i = 0; i < mainMenuBtnRects.size(); i++) {
+                        if (mainMenuBtnRects[i].contains(scenePos)) {
+                            bool hasContinue = (savedLevelNum > 0);
+                            if (i == 0) {
+                                pendingAction = ACT_SHOW_LEVEL_SELECT;
+                                return true;
+                            } else if (hasContinue && i == 1) {
+                                pendingAction = ACT_CONTINUE_GAME;
+                                return true;
+                            } else if ((hasContinue && i == 2) || (!hasContinue && i == 1)) {
+                                pendingAction = ACT_SHOW_SETTINGS;
+                                return true;
+                            } else if (i == mainMenuBtnCount - 1) {
+                                pendingAction = ACT_EXIT;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // === 设置界面悬停/点击 ===
+            if (currentState == SETTINGS) {
+                // 返回按钮悬停
+                if (!settingsBtnRects.isEmpty() && !settingsButtons.isEmpty()) {
+                    bool inside = settingsBtnRects[0].contains(scenePos);
+                    settingsButtons[0]->setBrush(inside ? QBrush(QColor(50, 80, 150, 230)) : QBrush(QColor(30, 50, 90, 210)));
+                }
+                // 返回按钮点击
+                if (event->type() == QEvent::MouseButtonPress &&
+                    static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                    if (!settingsBtnRects.isEmpty() && settingsBtnRects[0].contains(scenePos)) {
+                        pendingAction = ACT_SHOW_MAIN_MENU;
+                        return true;
+                    }
+                    // 音量滑块点击
+                    if (!settingsVolRect.isNull() && settingsVolRect.contains(scenePos)) {
+                        settingsDragging = true;
+                        qreal relX = scenePos.x() - settingsVolRect.x();
+                        if (relX < 0) relX = 0;
+                        if (relX > settingsVolRect.width()) relX = settingsVolRect.width();
+                        volumeLevel = relX / settingsVolRect.width();
+                        audioOutput->setVolume(volumeLevel);
+                        if (settingsVolFg) settingsVolFg->setRect(settingsVolRect.x(), settingsVolRect.y(),
+                            settingsVolRect.width() * volumeLevel, settingsVolRect.height());
+                        if (settingsVolHandle) settingsVolHandle->setPos(
+                            settingsVolRect.x() + settingsVolRect.width() * volumeLevel - 7, settingsVolRect.y() - 4);
+                        return true;
+                    }
+                }
+            }
+            if (event->type() == QEvent::MouseButtonRelease) {
+                settingsDragging = false;
+            }
+            if (event->type() == QEvent::MouseMove && settingsDragging && currentState == SETTINGS) {
+                qreal relX = scenePos.x() - settingsVolRect.x();
+                if (relX < 0) relX = 0;
+                if (relX > settingsVolRect.width()) relX = settingsVolRect.width();
+                volumeLevel = relX / settingsVolRect.width();
+                audioOutput->setVolume(volumeLevel);
+                if (settingsVolFg) settingsVolFg->setRect(settingsVolRect.x(), settingsVolRect.y(),
+                    settingsVolRect.width() * volumeLevel, settingsVolRect.height());
+                if (settingsVolHandle) settingsVolHandle->setPos(
+                    settingsVolRect.x() + settingsVolRect.width() * volumeLevel - 7, settingsVolRect.y() - 4);
+            }
+
+            // === 选关界面悬停/点击 ===
+            if (currentState == LevelSelect) {
+                for (int i = 0; i < cardRects.size() && i < levelCards.size(); i++) {
+                    bool inside = cardRects[i].contains(scenePos);
+                    bool isContinueCard = (i < cardLevelNums.size() && cardLevelNums[i] == -1);
+                    QColor normal = isContinueCard ? QColor(30, 70, 30, 210) : QColor(30, 30, 70, 210);
+                    QColor hover = isContinueCard ? QColor(50, 140, 50, 230) : QColor(60, 60, 140, 230);
+                    QPen normalPen = isContinueCard ? QPen(QColor(100, 200, 100), 2) : QPen(QColor(80, 80, 180), 2);
+                    if (levelCards[i]) {
+                        levelCards[i]->setBrush(inside ? QBrush(hover) : QBrush(normal));
+                        levelCards[i]->setPen(inside ? QPen(QColor(200, 200, 100), 3) : normalPen);
+                    }
+                    if (inside && event->type() == QEvent::MouseButtonPress &&
+                        static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                        if (isContinueCard) {
+                            pendingAction = ACT_CONTINUE_GAME;
+                            return true;
+                        }
+                        int lvNum = (i < cardLevelNums.size()) ? cardLevelNums[i] : 1;
+                        keys.insert(Qt::Key_1 + lvNum - 1);
+                        return true;
+                    }
+                }
+            }
+
+            // === 暂停菜单悬停/点击 ===
+            if (currentState == PAUSED) {
+                for (int i = 0; i < pauseBtnRects.size() && i < pauseButtons.size(); i++) {
+                    bool inside = pauseBtnRects[i].contains(scenePos);
+                    QColor c1 = (i == 0) ? QColor(30, 80, 30, 200) : QColor(80, 30, 30, 200);
+                    QColor c2 = (i == 0) ? QColor(50, 140, 50, 230) : QColor(140, 50, 50, 230);
+                    pauseButtons[i]->setBrush(inside ? QBrush(c2) : QBrush(c1));
+                }
+                if (event->type() == QEvent::MouseButtonPress &&
+                    static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                    for (int i = 0; i < pauseBtnRects.size(); i++) {
+                        if (pauseBtnRects[i].contains(scenePos)) {
+                            if (i == 0) {
+                                pendingAction = ACT_RESUME_GAME;
+                                return true;
+                            } else if (i == 1) {
+                                pendingAction = ACT_SHOW_MAIN_MENU;
+                                return true;
+                            }
+                        }
+                    }
+                    if (volTrackRect.contains(scenePos)) {
+                        isDraggingVolume = true;
+                        qreal relX = scenePos.x() - volTrackRect.x();
+                        if (relX < 0) relX = 0;
+                        if (relX > volTrackRect.width()) relX = volTrackRect.width();
+                        volumeLevel = relX / volTrackRect.width();
+                        audioOutput->setVolume(volumeLevel);
+                        if (volTrackFg) volTrackFg->setRect(volTrackRect.x(), volTrackRect.y(),
+                            volTrackRect.width() * volumeLevel, volTrackRect.height());
+                        if (volHandle) volHandle->setPos(volTrackRect.x() + volTrackRect.width() * volumeLevel - 6, volTrackRect.y() - 4);
+                        return true;
+                    }
+                }
+                if (event->type() == QEvent::MouseButtonRelease) {
+                    isDraggingVolume = false;
+                }
+                if (event->type() == QEvent::MouseMove && isDraggingVolume) {
+                    qreal relX = scenePos.x() - volTrackRect.x();
+                    if (relX < 0) relX = 0;
+                    if (relX > volTrackRect.width()) relX = volTrackRect.width();
+                    volumeLevel = relX / volTrackRect.width();
+                    audioOutput->setVolume(volumeLevel);
+                    if (volTrackFg) volTrackFg->setRect(volTrackRect.x(), volTrackRect.y(),
+                        volTrackRect.width() * volumeLevel, volTrackRect.height());
+                    if (volHandle) volHandle->setPos(volTrackRect.x() + volTrackRect.width() * volumeLevel - 6, volTrackRect.y() - 4);
+                }
+            }
+
+            // === 游戏结束界面悬停/点击 ===
+            if (currentState == GAME_OVER) {
+                for (int i = 0; i < gameOverBtnRects.size() && i < gameOverButtons.size(); i++) {
+                    bool inside = gameOverBtnRects[i].contains(scenePos);
+                    QColor c1 = (i == 0) ? QColor(30, 80, 30, 210) : QColor(80, 25, 25, 210);
+                    QColor c2 = (i == 0) ? QColor(50, 140, 50, 230) : QColor(140, 50, 50, 230);
+                    gameOverButtons[i]->setBrush(inside ? QBrush(c2) : QBrush(c1));
+                }
+                if (event->type() == QEvent::MouseButtonPress &&
+                    static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                    for (int i = 0; i < gameOverBtnRects.size(); i++) {
+                        if (gameOverBtnRects[i].contains(scenePos)) {
+                            if (i == 0) {
+                                pendingAction = ACT_RESTART_CHECKPOINT;
+                                return true;
+                            } else if (i == 1) {
+                                pendingAction = ACT_SHOW_MAIN_MENU;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
+}
+
+void MainWindow::cleanupSelectUI() {
+    if (selectOverlay) { scene->removeItem(selectOverlay); delete selectOverlay; selectOverlay = nullptr; }
+    if (selectTitle) { scene->removeItem(selectTitle); delete selectTitle; selectTitle = nullptr; }
+    for (auto* c : levelCards) { scene->removeItem(c); delete c; }
+    for (auto* l : cardLabels) { scene->removeItem(l); delete l; }
+    for (auto* h : categoryHeaders) { scene->removeItem(h); delete h; }
+    levelCards.clear(); cardLabels.clear(); cardRects.clear(); cardLevelNums.clear(); categoryHeaders.clear();
+    if (menuText) { scene->removeItem(menuText); delete menuText; menuText = nullptr; }
+}
+
+void MainWindow::cleanupPauseUI() {
+    if (pauseOverlay) { scene->removeItem(pauseOverlay); delete pauseOverlay; pauseOverlay = nullptr; }
+    if (pauseTitle) { scene->removeItem(pauseTitle); delete pauseTitle; pauseTitle = nullptr; }
+    for (auto* b : pauseButtons) { scene->removeItem(b); delete b; }
+    for (auto* t : pauseButtonTexts) { scene->removeItem(t); delete t; }
+    pauseButtons.clear(); pauseButtonTexts.clear(); pauseBtnRects.clear();
+    if (volTrackBg) { scene->removeItem(volTrackBg); delete volTrackBg; volTrackBg = nullptr; }
+    if (volTrackFg) { scene->removeItem(volTrackFg); delete volTrackFg; volTrackFg = nullptr; }
+    if (volHandle) { scene->removeItem(volHandle); delete volHandle; volHandle = nullptr; }
+    isDraggingVolume = false;
+}
+
+void MainWindow::cleanupGameObjects() {
+    for (Enemy* t : enemies) { scene->removeItem(t); delete t; }
+    enemies.clear();
+    for (Tile* t : waters) { scene->removeItem(t); delete t; }
+    waters.clear();
+    for (Tile* t : floors) { scene->removeItem(t); delete t; }
+    floors.clear();
+    spikes.clear();
+    for (Cake* c : cakes) { scene->removeItem(c); delete c; }
+    cakes.clear();
+    for (Checkpoint* cp : checkpoints) { scene->removeItem(cp); delete cp; }
+    checkpoints.clear();
+    for (Goal* g : goals) { scene->removeItem(g); delete g; }
+    goals.clear();
+    for (auto* ex : exhaustItems) { scene->removeItem(ex); delete ex; }
+    exhaustItems.clear(); exhaustLifetimes.clear();
+    // Boss已在enemies循环中delete，置空防止悬空指针
+    dukeFishron = nullptr;
+    brainOfCthulhu = nullptr;
+    iceGod = nullptr;
+    if (player) { scene->removeItem(player); delete player; player = nullptr; }
+    staminaBar->setVisible(false);
+    for (auto icon : lifeIcons) icon->setVisible(false);
+    if (cooldownText) cooldownText->setVisible(false);
+    if (bossHpBarBg) bossHpBarBg->setVisible(false);
+    if (bossHpBarFg) bossHpBarFg->setVisible(false);
+}
+
+void MainWindow::cleanupGameOverUI() {
+    if (gameOverOverlay) { scene->removeItem(gameOverOverlay); delete gameOverOverlay; gameOverOverlay = nullptr; }
+    if (gameOverTitle) { scene->removeItem(gameOverTitle); delete gameOverTitle; gameOverTitle = nullptr; }
+    for (auto* b : gameOverButtons) { scene->removeItem(b); delete b; }
+    for (auto* t : gameOverButtonTexts) { scene->removeItem(t); delete t; }
+    gameOverButtons.clear();
+    gameOverButtonTexts.clear();
+    gameOverBtnRects.clear();
+}
+
+void MainWindow::showGameOver() {
+    cleanupGameOverUI();
+
+    qreal camX = player->x();
+    qreal camY = 850;
+    qreal vw = view->viewport()->width();
+    qreal vh = view->viewport()->height();
+    qreal cx = camX - vw / 2.0;
+    qreal cy = camY - vh / 2.0;
+
+    gameOverOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    gameOverOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
+    gameOverOverlay->setPen(Qt::NoPen);
+    gameOverOverlay->setZValue(1999);
+    scene->addItem(gameOverOverlay);
+
+    gameOverTitle = new QGraphicsTextItem("GAME OVER");
+    gameOverTitle->setFont(QFont("SimHei", 48, QFont::Bold));
+    gameOverTitle->setDefaultTextColor(QColor(255, 80, 80));
+    gameOverTitle->setZValue(2000);
+    double tw = gameOverTitle->boundingRect().width();
+    gameOverTitle->setPos(cx + (vw - tw) / 2.0, cy + 80);
+    scene->addItem(gameOverTitle);
+
+    qreal btnW = 260, btnH = 50, btnSpacing = 20;
+    qreal btnX = cx + (vw - btnW) / 2.0;
+    qreal btnY = cy + vh / 2.0 + 20;
+
+    struct { QString text; QColor bg; QColor border; } btns[] = {
+        {"重新开始", QColor(30, 80, 30, 210), QColor(100, 200, 100)},
+        {"返回主菜单", QColor(80, 25, 25, 210), QColor(200, 90, 90)},
+    };
+
+    gameOverButtons.clear();
+    gameOverButtonTexts.clear();
+    gameOverBtnRects.clear();
+
+    for (int i = 0; i < 2; i++) {
+        QRectF br(btnX, btnY + i * (btnH + btnSpacing), btnW, btnH);
+        gameOverBtnRects.append(br);
+
+        QGraphicsRectItem* btn = new QGraphicsRectItem(br);
+        btn->setBrush(QBrush(btns[i].bg));
+        btn->setPen(QPen(btns[i].border, 2));
+        btn->setZValue(2000);
+        scene->addItem(btn);
+        gameOverButtons.append(btn);
+
+        QGraphicsTextItem* txt = new QGraphicsTextItem(btns[i].text);
+        txt->setFont(QFont("SimHei", 18, QFont::Bold));
+        txt->setDefaultTextColor(Qt::white);
+        txt->setZValue(2001);
+        double tw2 = txt->boundingRect().width();
+        txt->setPos(btnX + (btnW - tw2) / 2.0, btnY + i * (btnH + btnSpacing) + 10);
+        scene->addItem(txt);
+        gameOverButtonTexts.append(txt);
+    }
+
+    currentState = GAME_OVER;
+    timer->start(16);
+}
+
+void MainWindow::showStartScreen() {
+    if (!titleText) {
+        titleText = new QGraphicsTextItem("星之卡比");
+        titleText->setFont(QFont("SimHei", 48, QFont::Bold));
+        titleText->setDefaultTextColor(Qt::white);
+        titleText->setZValue(2000);
+        titleText->setPos(380, 650);
+        scene->addItem(titleText);
+    } else { titleText->setVisible(true); }
+    if (!hintText) {
+        hintText = new QGraphicsTextItem("- 按ENTER开始游戏 -");
+        hintText->setFont(QFont("SimHei", 20, QFont::Bold));
+        hintText->setDefaultTextColor(Qt::yellow);
+        hintText->setZValue(2000);
+        hintText->setPos(380, 780);
+        scene->addItem(hintText);
+    } else { hintText->setVisible(true); }
+    if (!player) {
+        player = new Player();
+        player->setPos(800, 856);
+        scene->addItem(player);
+    }
+    currentState = START_SCREEN;
+    timer->start(16);
+    enterPressed = false;
+}
+
+void MainWindow::cleanupMainMenuUI() {
+    if (mainMenuOverlay) { scene->removeItem(mainMenuOverlay); delete mainMenuOverlay; mainMenuOverlay = nullptr; }
+    if (mainMenuTitle) { scene->removeItem(mainMenuTitle); delete mainMenuTitle; mainMenuTitle = nullptr; }
+    for (auto* b : mainMenuButtons) { scene->removeItem(b); delete b; }
+    for (auto* t : mainMenuBtnTexts) { scene->removeItem(t); delete t; }
+    mainMenuButtons.clear(); mainMenuBtnTexts.clear(); mainMenuBtnRects.clear();
+    mainMenuBtnCount = 0;
+}
+
+void MainWindow::cleanupSettingsUI() {
+    if (settingsOverlay) { scene->removeItem(settingsOverlay); delete settingsOverlay; settingsOverlay = nullptr; }
+    if (settingsTitle) { scene->removeItem(settingsTitle); delete settingsTitle; settingsTitle = nullptr; }
+    for (auto* b : settingsButtons) { scene->removeItem(b); delete b; }
+    for (auto* t : settingsBtnTexts) { scene->removeItem(t); delete t; }
+    settingsButtons.clear(); settingsBtnTexts.clear(); settingsBtnRects.clear();
+    if (settingsVolBg) { scene->removeItem(settingsVolBg); delete settingsVolBg; settingsVolBg = nullptr; }
+    if (settingsVolFg) { scene->removeItem(settingsVolFg); delete settingsVolFg; settingsVolFg = nullptr; }
+    if (settingsVolHandle) { scene->removeItem(settingsVolHandle); delete settingsVolHandle; settingsVolHandle = nullptr; }
+    settingsDragging = false;
+}
+
+void MainWindow::showMainMenu() {
+    cleanupMainMenuUI();
+    view->centerOn(500, 900);
+    qreal vw = view->viewport()->width();
+    qreal vh = view->viewport()->height();
+    qreal cx = 500 - vw / 2.0;
+    qreal cy = 900 - vh / 2.0;
+
+    mainMenuOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    mainMenuOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
+    mainMenuOverlay->setPen(Qt::NoPen);
+    mainMenuOverlay->setZValue(1999);
+    scene->addItem(mainMenuOverlay);
+
+    mainMenuTitle = new QGraphicsTextItem("星之卡比");
+    mainMenuTitle->setFont(QFont("SimHei", 42, QFont::Bold));
+    mainMenuTitle->setDefaultTextColor(QColor(255, 255, 100));
+    mainMenuTitle->setZValue(2000);
+    mainMenuTitle->setPos(cx + (vw - mainMenuTitle->boundingRect().width()) / 2.0, cy + 40);
+    scene->addItem(mainMenuTitle);
+
+    // 按钮列表
+    struct BtnInfo { QString text; QColor bgColor; QColor borderColor; };
+    QList<BtnInfo> btns;
+    btns.append({"选择关卡", QColor(30, 50, 90, 210), QColor(80, 120, 220)});
+    if (savedLevelNum > 0)
+        btns.append({"继续游戏", QColor(30, 80, 30, 210), QColor(100, 200, 100)});
+    btns.append({"设置", QColor(70, 60, 20, 210), QColor(180, 160, 60)});
+    btns.append({"退出游戏", QColor(80, 25, 25, 210), QColor(200, 90, 90)});
+    mainMenuBtnCount = btns.size();
+
+    qreal btnW = 240, btnH = 50, btnSpacing = 18;
+    qreal btnX = cx + (vw - btnW) / 2.0;
+    qreal btnY = cy + 130;
+    mainMenuButtons.clear(); mainMenuBtnTexts.clear(); mainMenuBtnRects.clear();
+
+    for (int i = 0; i < btns.size(); i++) {
+        QRectF br(btnX, btnY + i * (btnH + btnSpacing), btnW, btnH);
+        mainMenuBtnRects.append(br);
+
+        QGraphicsRectItem* btn = new QGraphicsRectItem(br);
+        btn->setBrush(QBrush(btns[i].bgColor));
+        btn->setPen(QPen(btns[i].borderColor, 2));
+        btn->setZValue(2000);
+        scene->addItem(btn);
+        mainMenuButtons.append(btn);
+
+        QGraphicsTextItem* txt = new QGraphicsTextItem(btns[i].text);
+        txt->setFont(QFont("SimHei", 18, QFont::Bold));
+        txt->setDefaultTextColor(Qt::white);
+        txt->setZValue(2001);
+        double tw = txt->boundingRect().width();
+        txt->setPos(btnX + (btnW - tw) / 2.0, btnY + i * (btnH + btnSpacing) + 8);
+        scene->addItem(txt);
+        mainMenuBtnTexts.append(txt);
+    }
+
+    view->centerOn(500, 900);
+    for (QGraphicsRectItem* bg : backgroundLayers) {
+        bg->setPos(500 - bg->rect().width() / 2.0, 0);
+    }
+    currentState = MAIN_MENU;
+    timer->start(16);
+}
+
+void MainWindow::showSettings() {
+    cleanupSettingsUI();
+    view->centerOn(500, 900);
+    qreal vw = view->viewport()->width();
+    qreal vh = view->viewport()->height();
+    qreal cx = 500 - vw / 2.0;
+    qreal cy = 900 - vh / 2.0;
+
+    settingsOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    settingsOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
+    settingsOverlay->setPen(Qt::NoPen);
+    settingsOverlay->setZValue(1999);
+    scene->addItem(settingsOverlay);
+
+    settingsTitle = new QGraphicsTextItem("设置");
+    settingsTitle->setFont(QFont("SimHei", 36, QFont::Bold));
+    settingsTitle->setDefaultTextColor(QColor(255, 255, 100));
+    settingsTitle->setZValue(2000);
+    settingsTitle->setPos(cx + (vw - settingsTitle->boundingRect().width()) / 2.0, cy + 40);
+    scene->addItem(settingsTitle);
+
+    qreal btnW = 260, btnH = 50;
+    qreal btnX = cx + (vw - btnW) / 2.0;
+    qreal curY = cy + 130;
+
+    // 音量标签 + 滑块
+    QGraphicsTextItem* volLabel = new QGraphicsTextItem("音量");
+    volLabel->setFont(QFont("SimHei", 16, QFont::Bold));
+    volLabel->setDefaultTextColor(Qt::white);
+    volLabel->setZValue(2001);
+    volLabel->setPos(btnX, curY);
+    scene->addItem(volLabel);
+    settingsBtnTexts.append(volLabel);
+
+    curY += 30;
+    qreal trackW = btnW, trackH = 24;
+    settingsVolRect = QRectF(btnX, curY, trackW, trackH);
+    settingsVolBg = new QGraphicsRectItem(settingsVolRect);
+    settingsVolBg->setBrush(QBrush(QColor(50, 50, 50)));
+    settingsVolBg->setPen(QPen(QColor(120, 120, 120), 1));
+    settingsVolBg->setZValue(2000);
+    scene->addItem(settingsVolBg);
+
+    settingsVolFg = new QGraphicsRectItem(btnX, curY, trackW * volumeLevel, trackH);
+    settingsVolFg->setBrush(QBrush(QColor(80, 160, 255)));
+    settingsVolFg->setPen(Qt::NoPen);
+    settingsVolFg->setZValue(2001);
+    scene->addItem(settingsVolFg);
+
+    settingsVolHandle = new QGraphicsRectItem(btnX + trackW * volumeLevel - 5, curY - 4, 14, trackH + 8);
+    settingsVolHandle->setBrush(QBrush(QColor(220, 220, 220)));
+    settingsVolHandle->setPen(QPen(Qt::white, 1));
+    settingsVolHandle->setZValue(2002);
+    scene->addItem(settingsVolHandle);
+
+    // 返回按钮
+    curY += trackH + 30;
+    QRectF backRect(btnX, curY, btnW, btnH);
+    settingsBtnRects.append(backRect);
+    QGraphicsRectItem* backBtn = new QGraphicsRectItem(backRect);
+    backBtn->setBrush(QBrush(QColor(30, 50, 90, 210)));
+    backBtn->setPen(QPen(QColor(80, 120, 220), 2));
+    backBtn->setZValue(2000);
+    scene->addItem(backBtn);
+    settingsButtons.append(backBtn);
+
+    QGraphicsTextItem* backTxt = new QGraphicsTextItem("返回主菜单");
+    backTxt->setFont(QFont("SimHei", 18, QFont::Bold));
+    backTxt->setDefaultTextColor(Qt::white);
+    backTxt->setZValue(2001);
+    double tw = backTxt->boundingRect().width();
+    backTxt->setPos(btnX + (btnW - tw) / 2.0, curY + 8);
+    scene->addItem(backTxt);
+    settingsBtnTexts.append(backTxt);
+
+    view->centerOn(500, 900);
+    for (QGraphicsRectItem* bg : backgroundLayers) {
+        bg->setPos(500 - bg->rect().width() / 2.0, 0);
+    }
+    currentState = SETTINGS;
+}
+
+void MainWindow::showLevelSelect() {
+    cleanupSelectUI();
+    view->centerOn(500, 900);
+    qreal vw = view->viewport()->width();
+    qreal vh = view->viewport()->height();
+    qreal cx = 500 - vw / 2.0;
+    qreal cy = 900 - vh / 2.0;
+
+    selectOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    selectOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
+    selectOverlay->setPen(Qt::NoPen);
+    selectOverlay->setZValue(1999);
+    scene->addItem(selectOverlay);
+
+    selectTitle = new QGraphicsTextItem("选择关卡");
+    selectTitle->setFont(QFont("SimHei", 36, QFont::Bold));
+    selectTitle->setDefaultTextColor(QColor(255, 255, 100));
+    selectTitle->setZValue(2000);
+    selectTitle->setPos(cx + (vw - selectTitle->boundingRect().width()) / 2.0, cy + 20);
+    scene->addItem(selectTitle);
+
+    // ====== 三栏分类布局 ======
+    struct LevelInfo { int num; QString name; QString desc; QColor bg; QColor border; };
+    struct Category { QString name; QString icon; QColor headerColor; QList<LevelInfo> levels; };
+
+    QList<Category> cats;
+    cats.append({"战斗关卡", "⚔", QColor(255, 120, 80), {
+        {1, "星之绿地", "Boss: 克苏鲁之脑", QColor(70, 30, 30, 210), QColor(200, 80, 80)},
+        {5, "熔岩堡垒", "Boss: 猪鲨公爵",    QColor(70, 40, 20, 210), QColor(220, 130, 50)},
+    }});
+    cats.append({"跑酷关卡", "🏃", QColor(80, 160, 255), {
+        {2, "刺之回廊", "移动刺 · 纯跳跃",   QColor(30, 40, 80, 210), QColor(80, 120, 220)},
+        {4, "云中回廊", "浮空平台 · 连续翻滚", QColor(30, 50, 90, 210), QColor(100, 150, 240)},
+    }});
+    cats.append({"坑爹关卡", "💀", QColor(80, 220, 100), {
+        {3, "寒冰炼狱", "苹果 · 伏击刺 · 冰砖", QColor(30, 60, 40, 210), QColor(80, 200, 100)},
+        {6, "暗影洞穴", "双重陷阱 · 上下交错", QColor(30, 50, 40, 210), QColor(100, 200, 120)},
+    }});
+
+    cardRects.clear(); cardLevelNums.clear();
+    qreal colW = vw / 3.0;
+    qreal cardW = 160, cardH = 60;
+    qreal cardSpacing = 10;
+    qreal colStartY = cy + 80;
+
+    for (int ci = 0; ci < cats.size(); ci++) {
+        qreal colX = cx + ci * colW;
+        qreal curY = colStartY;
+
+        // 分类标题
+        QGraphicsTextItem* catHeader = new QGraphicsTextItem(cats[ci].icon + " " + cats[ci].name);
+        catHeader->setFont(QFont("SimHei", 16, QFont::Bold));
+        catHeader->setDefaultTextColor(cats[ci].headerColor);
+        catHeader->setZValue(2000);
+        catHeader->setPos(colX + (colW - cardW) / 2.0 + 10, curY);
+        scene->addItem(catHeader);
+        categoryHeaders.append(catHeader);
+        curY += 30;
+
+        // 该分类下的关卡卡片
+        for (auto& lv : cats[ci].levels) {
+            qreal cardX = colX + (colW - cardW) / 2.0;
+            QRectF cr(cardX, curY, cardW, cardH);
+            cardRects.append(cr);
+            cardLevelNums.append(lv.num);
+
+            QGraphicsRectItem* card = new QGraphicsRectItem(cr);
+            card->setBrush(QBrush(lv.bg));
+            card->setPen(QPen(lv.border, 2));
+            card->setZValue(2000);
+            scene->addItem(card);
+            levelCards.append(card);
+
+            QGraphicsTextItem* label = new QGraphicsTextItem(QString("关卡%1\n%2").arg(lv.num).arg(lv.name));
+            label->setFont(QFont("SimHei", 11, QFont::Bold));
+            label->setDefaultTextColor(Qt::white);
+            label->setZValue(2001);
+            double tw = label->boundingRect().width();
+            double th = label->boundingRect().height();
+            label->setPos(cardX + (cardW - tw) / 2.0, curY + (cardH - th) / 2.0);
+            scene->addItem(label);
+            cardLabels.append(label);
+
+            curY += cardH + cardSpacing;
+        }
+
+        // 继续游戏卡片（如果有存档且是该分类的关卡）
+        if (savedLevelNum > 0 && ci == 0) {
+            // 在战斗栏底部放继续游戏卡片
+            qreal cardX = colX + (colW - cardW) / 2.0;
+            QRectF cr(cardX, curY + 15, cardW, cardH);
+            cardRects.append(cr);
+            cardLevelNums.append(-1); // -1 表示继续游戏
+
+            QGraphicsRectItem* card = new QGraphicsRectItem(cr);
+            card->setBrush(QBrush(QColor(30, 70, 30, 210)));
+            card->setPen(QPen(QColor(100, 200, 100), 2));
+            card->setZValue(2000);
+            scene->addItem(card);
+            levelCards.append(card);
+
+            QGraphicsTextItem* label = new QGraphicsTextItem(QString("继续游戏\n(关卡%1)").arg(savedLevelNum));
+            label->setFont(QFont("SimHei", 11, QFont::Bold));
+            label->setDefaultTextColor(QColor(180, 255, 180));
+            label->setZValue(2001);
+            double tw = label->boundingRect().width();
+            double th = label->boundingRect().height();
+            label->setPos(cardX + (cardW - tw) / 2.0, cr.y() + (cardH - th) / 2.0);
+            scene->addItem(label);
+            cardLabels.append(label);
+        }
+    }
+
+    // 底部提示
+    menuText = new QGraphicsTextItem("- 按数字键1-6选关 · 按ESC返回主菜单 -");
+    menuText->setFont(QFont("SimHei", 13, QFont::Bold));
+    menuText->setDefaultTextColor(QColor(200, 200, 200));
+    menuText->setZValue(2000);
+    double tw = menuText->boundingRect().width();
+    menuText->setPos(cx + (vw - tw) / 2.0, colStartY + 210);
+    scene->addItem(menuText);
+
+    view->centerOn(500, 900);
+    for (QGraphicsRectItem* bg : backgroundLayers) {
+        bg->setPos(500 - bg->rect().width() / 2.0, 0);
+    }
+    currentState = LevelSelect;
+    timer->start(16);
 }
