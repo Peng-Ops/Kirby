@@ -20,7 +20,7 @@ public:
     void takeDamage(int dmg) override;
 
     BossState state = FLYING;
-    int fullHp = 80;
+    int fullHp = 100;
     bool isPhase2 = false;     // 半血进入二阶段
     int invulnTimer = 0;
 
@@ -53,7 +53,7 @@ private:
 
     // 场景边界
     static constexpr double sceneW = 5000.0;
-    static constexpr double sceneH = 1000.0;
+    static constexpr double sceneH = 1200.0;
 };
 
 #endif // BRAINOFCTHULHU_H

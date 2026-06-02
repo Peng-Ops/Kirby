@@ -12,7 +12,10 @@ public:
     MinionEnemy(QString spritePath, int frames, double speed, CopyAbility ab);
     void updateLogic() override;
     void reverseDirection() override;
+    bool canBeSwallowed() override;
     bool isFacingRight() const { return facingRight; }
+    void setPatrolDuration(int frames) { patrolDuration = frames; }
+    QPainterPath shape() const override;
 
 private:
     int currentFrame = 0;

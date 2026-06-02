@@ -37,6 +37,10 @@ public:
     // 找到之前的 isAttacking，在它附近添加：
     bool isLeafSkill = false;   // 是否正在释放叶子技能
     bool isLightningFlying = false;
+    bool isLightningDashing = false;
+    int lightningDashTimer = 0;
+    void startLightningDash();
+    void endLightningDash();
     void startLeafSkill();      // 开始释放叶子技能
     void endLeafSkill();        // 结束释放叶子技能
     QPainterPath shape() const override;
@@ -63,6 +67,7 @@ public:
     // ====== 新增：蛋糕带来的攻击能力计时器 ======
     int attackPowerTimer = 0; // 剩余攻击能力的帧数
     bool hasAttackPower() const { return attackPowerTimer > 0; }
+    int starAttackStock = 0;   // 星星单次攻击储备数
     void startDigest();                               // 开始消化能力
     bool isDigesting = false;                         // 是否正在播放消化变身动画
     bool isIceDefending = false;         // 是否正在冰形态防御

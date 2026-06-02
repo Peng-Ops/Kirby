@@ -2,9 +2,13 @@
 #include "ui_mainwindow.h"
 #include "basicenemy.h"
 #include "apple.h"
+#include "xuehua.h"
 #include <QPainter>
+#include <QCursor>
+
 #include <QStyleFactory>
 #include <QMouseEvent>
+#include <cmath>
 int originalSize = 24;
 int renderSize = originalSize * 2;
 
@@ -15,11 +19,14 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     player = nullptr;
-    this->resize(1000, 700);
 
+    // 在 MainWindow 构造函数中，找到 this->resize(1000, 700); 并替换为以下两行：
+    this->setFixedSize(1000, 700);
+    this->setWindowFlags(Qt::Window | Qt::MSWindowsFixedSizeDialogHint);
     // 1. 场景
     scene = new QGraphicsScene(this);
-    scene->setSceneRect(0, 0, 5000, 1000); // 地图长度设为 5000
+    scene->setSceneRect(0, 0, 52000, 1200); // 地图长度设为 52000
+    scene->setBackgroundBrush(QColor(135, 206, 235)); // 默认天空蓝背景
 
     view = new QGraphicsView(scene, this);
     view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -81,6 +88,27 @@ MainWindow::MainWindow(QWidget *parent)
             scene->addItem(bg);
 
             backgroundLayers.append(bg); // 记录图层
+        }
+    }
+
+    // ====== 预加载猪鲨二阶段背景（Clouds 3），初始透明 ======
+    QStringList bgPathsPhase2 = {
+        ":/tu/Clouds 3/1.png",
+        ":/tu/Clouds 3/2.png",
+        ":/tu/Clouds 3/3.png",
+        ":/tu/Clouds 3/4.png"
+    };
+    for (int i = 0; i < bgPathsPhase2.size(); ++i) {
+        QPixmap pix(bgPathsPhase2[i]);
+        if (!pix.isNull()) {
+            QPixmap scaledPix = pix.scaledToHeight(sceneH, Qt::SmoothTransformation);
+            QGraphicsRectItem* bg = new QGraphicsRectItem(0, 0, scaledPix.width(), sceneH);
+            bg->setBrush(QBrush(scaledPix));
+            bg->setPen(Qt::NoPen);
+            bg->setZValue(-96 + i); // 在Clouds 1（-100~-97）之上
+            bg->setOpacity(0.0);
+            scene->addItem(bg);
+            phase2BgLayers.append(bg);
         }
     }
 
@@ -170,7 +198,7 @@ MainWindow::MainWindow(QWidget *parent)
     bossHpBarFg->setPen(Qt::NoPen);
     bossHpBarFg->setZValue(2001);
     bossHpBarFg->setVisible(false);
-    scene->addItem(bossHpBarFg);*/
+    scene->addItem(bossHpBarFg);
 
     //初始化生命值 HUD 图标
     QPixmap lifePix(":/tu/life.png");
@@ -190,35 +218,79 @@ MainWindow::MainWindow(QWidget *parent)
     cooldownText->setVisible(false);
     scene->addItem(cooldownText);
 
+    // ====== 形态技能冷却图标 (左下角) ======
+    auto createCdIcon = [&](const QString &path) -> QGraphicsPixmapItem* {
+        QPixmap pix(path);
+        QGraphicsPixmapItem* item = new QGraphicsPixmapItem(pix);
+        if (!pix.isNull()) {
+            item->setScale(1.2);
+        }
+        item->setZValue(2000);
+        item->setVisible(false);
+        scene->addItem(item);
+        return item;
+    };
+    fireCdIcon = createCdIcon(":/tu/fire_lenque.png");
+    iceCdIcon  = createCdIcon(":/tu/ice_lenque.png");
+    leafCdIcon = createCdIcon(":/tu/leaf_lenque.png");
+
     // 初始复活位置 = 卡比出生点
     lastCheckpointPos = QPointF(800, 856);
-    titleText = new QGraphicsTextItem("星之卡比");
-    titleText->setFont(QFont("SimHei", 48, QFont::Bold));
-    titleText->setDefaultTextColor(Qt::white);
-    titleText->setZValue(2000);
-    titleText->setPos(380, 650); // 回到屏幕中央上方
-    scene->addItem(titleText);
-
-    hintText = new QGraphicsTextItem("- 按ENTER开始游戏 -");
-    hintText->setFont(QFont("SimHei", 20, QFont::Bold));
-    hintText->setDefaultTextColor(Qt::yellow);
-    hintText->setZValue(2000);
-    hintText->setPos(380, 780);  // 回到屏幕中央下方
-    scene->addItem(hintText);
 
     // 音乐
     bgmPlayer = new QMediaPlayer(this);
     audioOutput = new QAudioOutput(this);
     bgmPlayer->setAudioOutput(audioOutput);
-    bgmPlayer->setSource(QUrl("qrc:///tu/kerby theme music.mp3"));
+    originalBgmSource = "qrc:///tu/kerby theme music.mp3";
+    bgmPlayer->setSource(QUrl(originalBgmSource));
     audioOutput->setVolume(volumeLevel); // 音量范围 0.0 到 1.0
     bgmPlayer->setLoops(QMediaPlayer::Infinite); // 无限循环
     bgmPlayer->play();
+
+    // ====== 音效系统初始化 ======
+    stepPlayer = new QMediaPlayer(this);
+    stepAudio = new QAudioOutput(this);
+    stepPlayer->setAudioOutput(stepAudio);
+    stepPlayer->setSource(QUrl("qrc:///tu/music/foley_footstep_concrete_1.wav"));
+    stepAudio->setVolume(0.3);
+    stepPlayer->setLoops(QMediaPlayer::Infinite);
+
+    waterPlayer = new QMediaPlayer(this);
+    waterAudio = new QAudioOutput(this);
+    waterPlayer->setAudioOutput(waterAudio);
+    waterPlayer->setSource(QUrl("qrc:///tu/music/water_babbling_loop.wav"));
+    waterAudio->setVolume(0.3);
+    waterPlayer->setLoops(QMediaPlayer::Infinite);
+
+    sfxPlayer = new QMediaPlayer(this);
+    sfxAudio = new QAudioOutput(this);
+    sfxPlayer->setAudioOutput(sfxAudio);
+    sfxAudio->setVolume(0.5);
+
+    cinematicPlayer = new QMediaPlayer(this);
+    cinematicAudio = new QAudioOutput(this);
+    cinematicPlayer->setAudioOutput(cinematicAudio);
+    cinematicAudio->setVolume(0.5);
+
+    // Boss登场音效
+    bossStingerPlayer = new QMediaPlayer(this);
+    bossStingerAudio = new QAudioOutput(this);
+    bossStingerPlayer->setAudioOutput(bossStingerAudio);
+
+    // RPG战斗音乐列表
+    bossMusicTracks = {
+        "qrc:///tu/music/rpg_bs004.m4a",
+        "qrc:///tu/music/rpg_bs005.m4a",
+        "qrc:///tu/music/rpg_bs008.m4a",
+        "qrc:///tu/music/rpg_bs009.m4a",
+        "qrc:///tu/music/rpg_bs010.m4a",
+    };
 
     // 6. 游戏循环
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::gameUpdate);
     timer->start(16);
+
 }
 MainWindow::~MainWindow() { delete ui; }
 
@@ -242,9 +314,12 @@ void MainWindow::loadLevel(int levelNum) {
     // 这里绝对不能再 delete t！只需要清空指针列表即可！
     spikes.clear();
 
-    // E. 清理上关遗留的蛋糕（防止遗漏内存泄漏）
+    // E. 清理上关遗留的蛋糕和星星（防止遗漏内存泄漏）
     for (Cake* c : cakes) { scene->removeItem(c); delete c; }
     cakes.clear();
+    for (Star* s : stars) { scene->removeItem(s); delete s; }
+    stars.clear();
+    bossStarSpawnTimer = 0;
 
     // F. 清理上关遗留的检查点（防止遗漏内存泄漏）
     for (Checkpoint* cp : checkpoints) { scene->removeItem(cp); delete cp; }
@@ -253,6 +328,10 @@ void MainWindow::loadLevel(int levelNum) {
     // G. 清理上关遗留的终点
     for (Goal* g : goals) { scene->removeItem(g); delete g; }
     goals.clear();
+
+    // G2. 清理上关遗留的木箱
+    for (Crate* crate : crates) { scene->removeItem(crate); delete crate; }
+    crates.clear();
 
     // H. 安全删除玩家
     if (player != nullptr) {
@@ -268,32 +347,60 @@ void MainWindow::loadLevel(int levelNum) {
     QStringList levelData;
     if (levelNum == 1) {
         levelData = {
-            ".................................................................66.........................", // 1
-            ".................................................................66.........................", // 2 碎石高墙顶部
-            "...........................................1111..................66.........................", // 3 高空浮岛（草地）
-            "...........................................2222..................66.....................P...", // 4 高空浮岛（泥土）
-            "...........................................7777......F...........66..................2222222", // 5 悬空冰块阶梯 1
-            "...................................................5555..........66..................2222222", // 6
-            ".................................................................66..................2222222", // 7 悬空冰块阶梯 2 -> 右侧高台有检查点 C
-            "...............................................55................66..................2222222", // 8 终点前的高台
-            ".........................C.......................................66..................2222222", // 9 出生点草地
-            ".......................11119....I...333333333....................22222.......L.......2222222", // 10 坑底：铺满地刺或水体
-            "..................P....2222111111111444444444.C..F.....G..F..I...22222....1111111....2222222", // 11 底部支撑
-            "11111111111111111111111222222222222244444444411111111166666111111222228888222222211112222222",
-            "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "..............................1111..........................................................................................................................................................................................................................................................................................................1111........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................",
+            "...........................................................................................................................1111......................................................................................................................................................................................................................................................................................111...................................................................................................................................................................................................................................1111.........................................................................................................................................................................................................................................................................................................................................................................",
+            "..1111................................................................111..................................................................................111................................................................5555....................................1111..................................................................................................................................................................................................................................................................................................................................111.......1111.................................................................................................................111C1111...........................11C111..................................................................................................................................................................................................11C11.............................................",
+            "........................................1111................................................................1111............................................................................44444444...............................................................................................................................................................111.....................................111............................................................................................1111....................................................................................................................................................................................................1111..............................................................................C.111...............................................................................................................................................................................................................................",
+            "...............111.....................................111111..................................111.....................................111................................1111..............44444444..............1111.............................................................111....................................................111.............................................................................................................................111.............................................................................................................1111............................................1111........................................1111................................C...1111..................................1111..111...................111..................111............................1111......................................111C11........................1111.......................................111C1..................1111......................................",
+            "........................................................................................................................1111................................................................33333333.......................................111............5555................................................1111................................................................1111..1......................................111..........666..............666.................666.......111..................................111.................1111...................G..111..1111.G...........11111.......G.............111......G..........................G..1111...........................................................111.L...............L.11111.......................L...111.............L.111111................111......111.E........................1111..............1.............111.............G.....................................111.............1111......................1111......1111...TTT............",
+            "P1111111E1E111111111C1111E1E1111111C111111111E1E11C11111111111I11C111111111K11C111111E1E1111F1111111I1111K111111111E1E1111111111F111C1111111I1111K11555511111111C1111E1E1111111111P111I11K11........1111555111111111111111I11111111111K111111111C1111E1E1111111111I11111111111K111111111C1111E1E1155551111I11111111111C1111F11P155555E555555555555C555555E5E55I55555555511111K111111111..11155555C55E51111111111K111111111C1111...P111F11111666111C11111111116661111C11F111111111666111C111...11F1111E1E1111111111C111666111F111111111K111555111C111....1111F1111P1111111111111111....111111111111C1.....11111111111111111C11.....111111111111111C11E1E111111111111111111111....11C1I111111111P11111111111111L11.......11111....11....111111111111....111111111111.......111111111111111........11111111111111111111....111K11P111...111F1....1111I111111..1C1L1111K1111....1F11C155E55511..G111111111......11I1K1E11F1111C1....1111L1111P11111111111111C11C1.....11C111111111....11C111111111....111C111111111C11....11111111C1111C11C1",
+            "2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
         };
-    } else if (levelNum == 2) {
+    } else if (levelNum == 99) {
+        // Boss战：平地地图（80列，两边有墙）
+        int bossRows = 10;
+        int bossCols = 80;
+        int bossBottomOffset = sceneH - bossRows * renderSize;
         levelData = {
-            "...................C......",
-            "111111.....5555....6666...", // 第二关加点冰块和火怪
-            "222222.....2222....2222..."
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "                                                                                ",
+            "1111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+            "2222222222222222222222222222222222222222222222222222222222222222222222222222222222",
         };
-    } else if (levelNum == 3) {
-        levelData = {
-            ".........333333........C..", // 第三关全是水
-            "111111...444444...1111111.",
-            "222222...222222...2222222."
-        };
+        // 在地图两侧叠加透明方块形成空气墙（防止卡比走出地图）
+        // 从场景顶部以下一直延伸到场景底部
+        {
+            QPixmap transparentPix(renderSize, renderSize);
+            transparentPix.fill(Qt::transparent);
+            int wallRows = 25;  // 1200px 覆盖整个场景高度
+            for (int r = -4; r < wallRows; r++) {
+                for (int c = 0; c < 2; c++) {
+                    Tile* wall = new Tile(Tile::Dirt, transparentPix);
+                    wall->setPos(c * renderSize, r * renderSize + bossBottomOffset);
+                    scene->addItem(wall);
+                    floors.append(wall);
+                }
+                for (int c = bossCols - 2; c < bossCols; c++) {
+                    Tile* wall = new Tile(Tile::Dirt, transparentPix);
+                    wall->setPos(c * renderSize, r * renderSize + bossBottomOffset);
+                    scene->addItem(wall);
+                    floors.append(wall);
+                }
+            }
+        }
     }
 
     int totalMapHeight = levelData.size() * renderSize;
@@ -341,6 +448,14 @@ void MainWindow::loadLevel(int levelNum) {
                 enemies.append(lightningEnemy);
                 continue;
             }
+            else if (type == 'E') {
+                MinionEnemy* basicEnemy = new MinionEnemy(":/tu/basic_enemy.png", 3, 1.0, Enemy::NONE);
+                basicEnemy->setScale(2.0);
+                basicEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
+                scene->addItem(basicEnemy);
+                enemies.append(basicEnemy);
+                continue;
+            }
             else if (type == '1')  tile = new Tile(Tile::Grass, grass);
             else if (type == '2')  tile = new Tile(Tile::Dirt, dirt);
             else if (type == '3')  tile = new Tile(Tile::WaterSurface, waterSurface);
@@ -359,6 +474,12 @@ void MainWindow::loadLevel(int levelNum) {
                 scene->addItem(cake);
                 cakes.append(cake);
             }
+            else if (type == 'K') {
+                Crate* crate = new Crate();
+                crate->setPos(c * renderSize, r * renderSize + bottomOffset);
+                scene->addItem(crate);
+                crates.append(crate);
+            }
             else if (type == 'P') {
                 Checkpoint* cp = new Checkpoint();
                 // 采用跟你地形一模一样的坐标计算公式和缩放
@@ -368,6 +489,13 @@ void MainWindow::loadLevel(int levelNum) {
                 scene->addItem(cp);
                 checkpoints.append(cp); // 塞进主循环检测的检查点列表
                 continue; // 检查点处理完，直接跳过下面的 tile 判定
+            }
+            else if (type == 'T') {
+                Goal* goal = new Goal();
+                goal->setPos(c * renderSize, r * renderSize + bottomOffset - 48);
+                scene->addItem(goal);
+                goals.append(goal);
+                continue;
             }
             if (tile) {
                 tile->setPos(c * renderSize, r * renderSize + bottomOffset);
@@ -383,16 +511,65 @@ void MainWindow::loadLevel(int levelNum) {
         }
     }
 
+    // ====== 3.5 自动填充地面坑洞 ======
+    {
+        int groundRowIdx = levelData.size() - 2;
+        if (groundRowIdx >= 0) {
+            for (int c = 0; c < levelData[groundRowIdx].length(); c++) {
+                if (levelData[groundRowIdx][c] == '.') {
+                    // 确认下方是泥土（即确实是地面，而非浮空平台）
+                    if (levelData.size() > groundRowIdx + 1 && levelData[groundRowIdx + 1][c] == '2') {
+                        Tile* fillTile = new Tile(Tile::Grass, grass);
+                        fillTile->setPos(c * renderSize, groundRowIdx * renderSize + bottomOffset);
+                        fillTile->setScale(2.0);
+                        scene->addItem(fillTile);
+                        floors.append(fillTile);
+                    }
+                }
+            }
+        }
+    }
+
+    // ====== 3.6 补充额外存档点（每约200列一个） ======
+    {
+        int groundRowIdx = levelData.size() - 2;
+        QVector<int> extraCpCols = { 200, 400, 600, 800, 900 };
+        for (int col : extraCpCols) {
+            if (col < levelData[groundRowIdx].length()) {
+                Checkpoint* cp = new Checkpoint();
+                cp->setPos(col * renderSize, groundRowIdx * renderSize + bottomOffset - 30);
+                cp->setScale(2.0);
+                scene->addItem(cp);
+                checkpoints.append(cp);
+            }
+        }
+    }
+
     // 4. 重生卡比
     player = new Player();
     player->setPos(800, 856);
     scene->addItem(player);
     lastCheckpointPos = QPointF(800, 856);
     // 5. 切换 UI 状态 (隐藏菜单字，显示 HUD)
-    if (titleText) titleText->setVisible(false);
-    if (hintText)  hintText->setVisible(false);
     staminaBar->setVisible(true);
     for (auto icon : lifeIcons) icon->setVisible(true);
+
+    // 5.5 浮动文字教程初始化
+    tutorialTriggers.clear();
+    tutorialTriggers = {
+        {1300, QStringLiteral("WASD / 方向键 - 移动，K - 跳跃 / 二段跳")},
+        {2500, QStringLiteral("J - 攻击！吃蛋糕获得攻击力")},
+        {4500, QStringLiteral("L - 吸入敌人，再按L消化获得能力！")},
+        {7000, QStringLiteral("普通敌人不可吞噬，用攻击或踩踏消灭")},
+        {10000, QStringLiteral("冰敌(I)可获得冰形态，按J冻结水面！")},
+        {12000, QStringLiteral("木箱可推动，填河或垫脚过障碍")},
+        {15500, QStringLiteral("火敌(F)可获得火形态，按J冲刺爆破！")},
+        {19000, QStringLiteral("叶敌(G)远程攻击，保持距离！")},
+        {23000, QStringLiteral("电敌(L)可飞行，探索隐藏区域！")},
+        {29000, QStringLiteral("灵活切换能力应对不同地形！")},
+        {35000, QStringLiteral("前方混合区，小心应对！")},
+        {41000, QStringLiteral("终点就在前方！加油！")},
+    };
 
     // 6. 状态机切换与启动
     currentState = PLAYING;
@@ -400,10 +577,14 @@ void MainWindow::loadLevel(int levelNum) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {
-    // ====== ESC暂停/恢复 ======
+    // ====== ESC暂停/返回 ======
     if (event->key() == Qt::Key_Escape && !event->isAutoRepeat()) {
+        if (currentState == LevelSelect) {
+            cleanupSelectUI();
+            showMainMenu();
+            return;
+        }
         if (currentState == PLAYING) {
-            timer->stop();
             savedLevelNum = currentLevelNum;
             savedCheckpointPos = lastCheckpointPos;
             savedForm = player->currentForm;
@@ -413,10 +594,8 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
             qreal camX = player->x();
             qreal camY = 850;
-            qreal vw = view->viewport()->width();
-            qreal vh = view->viewport()->height();
 
-            pauseOverlay = new QGraphicsRectItem(camX - vw/2.0, camY - vh/2.0, vw, vh);
+            pauseOverlay = new QGraphicsRectItem(camX - SCREEN_W/2.0, camY - SCREEN_H/2.0, SCREEN_W, SCREEN_H);
             pauseOverlay->setBrush(QBrush(QColor(0, 0, 0, 170)));
             pauseOverlay->setPen(Qt::NoPen);
             pauseOverlay->setZValue(2000);
@@ -427,12 +606,12 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
             pauseTitle->setDefaultTextColor(Qt::white);
             pauseTitle->setZValue(2001);
             double tw = pauseTitle->boundingRect().width();
-            pauseTitle->setPos(camX - tw/2.0, camY - vh/3.0);
+            pauseTitle->setPos(camX - tw/2.0, camY - SCREEN_H/3.0);
             scene->addItem(pauseTitle);
 
             qreal btnW = 260, btnH = 50;
             qreal btnX = camX - btnW/2.0;
-            qreal btnY = camY - vh/6.0;
+            qreal btnY = camY - SCREEN_H/6.0;
 
             // 继续游戏按钮
             QRectF contRect(btnX, btnY, btnW, btnH);
@@ -499,22 +678,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
             currentState = PAUSED;
             return;
-        } else if (currentState == PAUSED) {
-            cleanupPauseUI();
-            currentState = PLAYING;
-            timer->start(16);
-            return;
         }
-    }
-
-    if (currentState == START_SCREEN) {
-        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-            enterPressed = true;
-        }
-        return;
     }
 
     if (event->isAutoRepeat()) return;
+    if (!player) return;
     if (player->isDigesting) {
         return;
     }
@@ -559,8 +727,30 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 
         // 核心修改：只有普通形态才能发动原本的光球攻击
         if (form == Enemy::NONE) {
-            if (player->hasAttackPower()) {
+            // 星星单次攻击优先（吞噬星星获得的特殊攻击）
+            if (player->starAttackStock > 0) {
+                player->starAttackStock--;
                 player->startAttack();
+                // 星星攻击音效
+                sfxPlayer->setSource(QUrl("qrc:///tu/music/snap.wav"));
+                sfxAudio->setVolume(0.5);
+                sfxPlayer->play();
+                // 生成星星子弹（使用星星贴图）
+                Projectile* proj = new Projectile(player->facingRight);
+                proj->damage = 50;
+                proj->vx = player->facingRight ? 16 : -16;
+                proj->setPixmap(QPixmap(":/tu/star.png").scaled(32, 32, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+                double startX = player->facingRight ? player->x() + 48 : player->x() - 24;
+                double startY = player->y() + 12;
+                proj->setPos(startX, startY);
+                scene->addItem(proj);
+                projectiles.append(proj);
+            } else if (player->hasAttackPower()) {
+                player->startAttack();
+                // 普通攻击音效
+                sfxPlayer->setSource(QUrl("qrc:///tu/music/snap.wav"));
+                sfxAudio->setVolume(0.5);
+                sfxPlayer->play();
                 Projectile* proj = new Projectile(player->facingRight);
                 double startX = player->facingRight ? player->x() + 48 : player->x() - 24;
                 double startY = player->y() + 12;
@@ -578,6 +768,10 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
         // 3. 叶形态：发射羽毛技能
         else if (form == Enemy::LEAF) {
             if (player->leafSkillCooldownTimer <= 0) {
+                // 叶形态攻击音效
+                sfxPlayer->setSource(QUrl("qrc:///tu/music/snap.wav"));
+                sfxAudio->setVolume(0.5);
+                sfxPlayer->play();
                 player->startLeafSkill();
                 player->leafSkillCooldownTimer = 180; // 3秒冷却
 
@@ -610,6 +804,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
                 jumpBuffer = 0;
                 player->vy = 0; // 开启时瞬间悬停，抵消掉落惯性
             } else {
+                player->endLightningDash(); // 关掉飞行时结束冲刺
                 player->setState(Player::JUMPING); // 关掉时恢复自然下落动作
             }
         }
@@ -631,6 +826,26 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
             // 重置为常规的待机或跳跃状态
             player->setState(player->isOnGround ? Player::IDLE : Player::JUMPING);
         }
+    }
+    // ====== U键发射星星（消耗starAttackStock，所有形态通用） ======
+    else if (event->key() == Qt::Key_U) {
+        if (player->starAttackStock <= 0) return;
+        if (player->isRolling || player->isSwallowing || player->isSpitting ||
+            player->isFireSprinting || player->isExploding || player->isDigesting) return;
+
+        player->starAttackStock--;
+        sfxPlayer->setSource(QUrl("qrc:///tu/music/snap.wav"));
+        sfxAudio->setVolume(0.5);
+        sfxPlayer->play();
+        Projectile* proj = new Projectile(player->facingRight);
+        proj->damage = 50;
+        proj->vx = player->facingRight ? 16 : -16;
+        proj->setPixmap(QPixmap(":/tu/star.png").scaled(32, 32, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        double startX = player->facingRight ? player->x() + 48 : player->x() - 24;
+        double startY = player->y() + 12;
+        proj->setPos(startX, startY);
+        scene->addItem(proj);
+        projectiles.append(proj);
     }
     // ====== L键多功能逻辑 ======
     else if (event->key() == Qt::Key_L) {
@@ -675,6 +890,30 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
         // 松开 J 键时，立刻解除防御状态并开始 10 秒冷却
         player->endIceDefend();
     }
+
+    // ====== 调试热键：F1-F10 跳转到地图不同段 ======
+    if (currentState == PLAYING && player) {
+        int section = -1;
+        if (event->key() == Qt::Key_F1) section = 0;
+        else if (event->key() == Qt::Key_F2) section = 1;
+        else if (event->key() == Qt::Key_F3) section = 2;
+        else if (event->key() == Qt::Key_F4) section = 3;
+        else if (event->key() == Qt::Key_F5) section = 4;
+        else if (event->key() == Qt::Key_F6) section = 5;
+        else if (event->key() == Qt::Key_F7) section = 6;
+        else if (event->key() == Qt::Key_F8) section = 7;
+        else if (event->key() == Qt::Key_F9) section = 8;
+        else if (event->key() == Qt::Key_F10) section = 9;
+
+        if (section >= 0) {
+            qreal mapW = scene->sceneRect().width();
+            qreal targetX = (mapW / 10.0) * section + 100;
+            if (targetX > mapW - 200) targetX = mapW - 200;
+            player->setPos(targetX, player->y());
+            player->vy = 0;
+            player->vx = 0;
+        }
+    }
 }
 void MainWindow::keyReleaseEvent(QKeyEvent *event) {
     if (event->isAutoRepeat()) return;
@@ -684,6 +923,98 @@ void MainWindow::keyReleaseEvent(QKeyEvent *event) {
 }
 
 void MainWindow::gameUpdate() {
+    // ====== 主菜单延迟初始化（首次进入 MAIN_MENU 时创建UI） ======
+    if (currentState == MAIN_MENU && mainMenuButtons.isEmpty()) {
+        showMainMenu();
+        return;
+    }
+
+    // ====== 每帧UI悬停变色（放在最前面，确保在所有 return 前执行） ======
+    {
+        QPoint vp = view->viewport()->mapFromGlobal(QCursor::pos());
+        QPointF sp = view->mapToScene(vp);
+        qreal sx = sp.x(), sy = sp.y();
+
+        if (currentState == MAIN_MENU) {
+            for (int i = 0; i < mainMenuBtnRects.size() && i < mainMenuButtons.size(); i++) {
+                bool in = mainMenuBtnRects[i].contains(sx, sy);
+                QColor n, h;
+                if (i == 0)                      { n=QColor(30,50,90,210);  h=QColor(50,80,150,230); }
+                else if (i == mainMenuBtnCount-1) { n=QColor(80,25,25,210); h=QColor(160,50,50,230); }
+                else                              { n=QColor(60,60,60,210); h=QColor(100,100,100,230); }
+                mainMenuButtons[i]->setBrush(in ? QBrush(h) : QBrush(n));
+            }
+        }
+
+        if (currentState == LevelSelect) {
+            if (isBossSelect) {
+                for (int i = 0; i < bossCardRects.size() && i < bossCards.size(); i++) {
+                    bool in = bossCardRects[i].contains(sx, sy);
+                    QColor n(50,50,80,200), h(80,80,160,230);
+                    if (bossCards[i]) {
+                        bossCards[i]->setBrush(in ? QBrush(h) : QBrush(n));
+                        bossCards[i]->setPen(QPen(in ? QColor(255,255,150) : QColor(150,150,200), in ? 3 : 2));
+                    }
+                }
+                if (bossBackLabel && bossBackLabel->isVisible()) {
+                    QRectF br = bossBackLabel->sceneBoundingRect().adjusted(-10,-5,10,5);
+                    bossBackLabel->setDefaultTextColor(br.contains(sx,sy) ? QColor(255,255,255) : QColor(180,180,255));
+                }
+            } else {
+                for (int i = 0; i < cardRects.size() && i < levelCards.size(); i++) {
+                    bool in = cardRects[i].contains(sx, sy);
+                    QColor n = (i==0)?QColor(30,70,30,210):QColor(70,30,30,210);
+                    QColor h = (i==0)?QColor(50,140,50,230):QColor(140,50,50,230);
+                    QPen np((i==0)?QColor(100,200,100):QColor(200,80,80), 2);
+                    if (levelCards[i]) {
+                        levelCards[i]->setBrush(in ? QBrush(h) : QBrush(n));
+                        levelCards[i]->setPen(QPen(in ? QColor(255,255,150) : np.color(), in ? 3 : 2));
+                    }
+                }
+            }
+        }
+
+        if (currentState == PAUSED) {
+            for (int i = 0; i < pauseBtnRects.size() && i < pauseButtons.size(); i++) {
+                bool in = pauseBtnRects[i].contains(sx, sy);
+                QColor c1 = (i==0)?QColor(30,80,30,200):QColor(80,30,30,200);
+                QColor c2 = (i==0)?QColor(50,140,50,230):QColor(140,50,50,230);
+                pauseButtons[i]->setBrush(in ? QBrush(c2) : QBrush(c1));
+            }
+            if (volHandle) {
+                bool over = volTrackRect.contains(sx, sy);
+                volHandle->setBrush(over ? QBrush(QColor(255,255,255)) : QBrush(QColor(220,220,220)));
+                volHandle->setPen(QPen(over ? QColor(255,255,150) : Qt::white, over ? 2 : 1));
+            }
+        }
+
+        if (currentState == SETTINGS) {
+            if (!settingsBtnRects.isEmpty() && !settingsButtons.isEmpty()) {
+                bool in = settingsBtnRects[0].contains(sx, sy);
+                settingsButtons[0]->setBrush(in ? QBrush(QColor(50,80,150,230)) : QBrush(QColor(30,50,90,210)));
+            }
+            if (settingsVolHandle && !settingsVolRect.isNull()) {
+                bool over = settingsVolRect.contains(sx, sy);
+                settingsVolHandle->setBrush(over ? QBrush(QColor(255,255,255)) : QBrush(QColor(220,220,220)));
+                settingsVolHandle->setPen(QPen(over ? QColor(255,255,150) : Qt::white, over ? 2 : 1));
+            }
+        }
+
+        if (currentState == GAME_OVER) {
+            for (int i = 0; i < gameOverBtnRects.size() && i < gameOverButtons.size(); i++) {
+                bool in = gameOverBtnRects[i].contains(sx, sy);
+                QColor c1 = (i==0)?QColor(30,80,30,210):QColor(80,25,25,210);
+                QColor c2 = (i==0)?QColor(50,140,50,230):QColor(140,50,50,230);
+                gameOverButtons[i]->setBrush(in ? QBrush(c2) : QBrush(c1));
+            }
+        }
+
+        if (currentState == ENDING && endingMenuBtn) {
+            bool in = endingMenuBtn->sceneBoundingRect().contains(sx, sy);
+            endingMenuBtn->setBrush(in ? QBrush(QColor(50,80,150,230)) : QBrush(QColor(30,50,90,210)));
+        }
+    }
+
     // ====== 处理待执行的状态转换动作（从eventFilter鼠标点击触发） ======
     if (pendingAction != ACT_NONE) {
         PendingAction act = pendingAction;
@@ -707,7 +1038,7 @@ void MainWindow::gameUpdate() {
             player->stamina = savedStamina;
             player->currentForm = savedForm;
             player->attackPowerTimer = savedAttackPowerTimer;
-            player->invulnTimer = 60;
+            player->invulnTimer = 90;
             lastCheckpointPos = savedCheckpointPos;
             savedLevelNum = 0;
             break;
@@ -734,9 +1065,52 @@ void MainWindow::gameUpdate() {
             break;
         case ACT_RESTART_CHECKPOINT:
             cleanupGameOverUI();
+
+            // Boss战重开：清除现有Boss及弹幕，让入场动画重新播放
+            if (pendingBossType > 0) {
+                // 先恢复猪鲨的水转换，防止Tile指针悬空并还原地形
+                if (dukeFishron) {
+                    for (auto& rec : dukeFishron->activeWaterChanges) {
+                        rec.tile->changeType(rec.originalType, rec.originalPixmap);
+                        waters.removeOne(rec.tile);
+                        floors.append(rec.tile);
+                    }
+                    dukeFishron->activeWaterChanges.clear();
+                    dukeFishron->pendingWaterConversions.clear();
+                }
+                // 从场景和敌人列表中移除所有Boss及相关单位
+                for (int i = enemies.size() - 1; i >= 0; i--) {
+                    Enemy* e = enemies[i];
+                    if (e == dukeFishron || e == brainOfCthulhu || e == iceGod ||
+                        dynamic_cast<Xuehua*>(e)) {
+                        scene->removeItem(e);
+                        enemies.removeAt(i);
+                        delete e;
+                    }
+                }
+                dukeFishron = nullptr;
+                brainOfCthulhu = nullptr;
+                iceGod = nullptr;
+                bossSpawned = false;      // 允许入场动画重新触发
+                bossIntroActive = false;
+                bossIntroTimer = 0;
+                // 清理残留弹幕
+                for (auto* p : projectiles) { scene->removeItem(p); delete p; }
+                projectiles.clear();
+                // 重置猪鲨二阶段背景
+                for (QGraphicsRectItem* bg : phase2BgLayers) {
+                    bg->setOpacity(0.0);
+                }
+                for (QGraphicsRectItem* bg : backgroundLayers) {
+                    bg->setOpacity(1.0);
+                }
+                dukePhase2BgStarted = false;
+                phase2BgFadeTimer = 0;
+            }
+
             player->setPos(lastCheckpointPos.x(), lastCheckpointPos.y());
             player->hp = 3;
-            player->invulnTimer = 60;
+            player->invulnTimer = 90;
             player->vy = 0;
             player->vx = 0;
             player->currentForm = Enemy::NONE;
@@ -765,121 +1139,148 @@ void MainWindow::gameUpdate() {
         return; // 动作执行后跳过本帧其余逻辑
     }
 
-    // 阶段一：静止的开始界面
-    if (currentState == START_SCREEN) {
-        if (enterPressed) {
-            player->vx = 0;
-            if (player->isOnGround){
-                enterPressed = false;      // 重置标记
-                if (titleText) { scene->removeItem(titleText); delete titleText; titleText = nullptr; }
-                if (hintText) { scene->removeItem(hintText); delete hintText; hintText = nullptr; }
-                // 进入【选关界面】
-                currentState = LevelSelect;
-
-                // 刷新屏幕上的文字提示
-                menuText = new QGraphicsTextItem("\t SELECT LEVEL:\n\nPress [ 1 ] for Level 1\nPress [ 2 ] for Level 2\nPress [ 3 ] for Level 3");
-                menuText->setFont(QFont("SimHei", 24, QFont::Bold));
-                menuText->setDefaultTextColor(Qt::white);
-                menuText->setZValue(2000);
-                menuText->setPos(300, 580); // 回到屏幕中央上方
-                scene->addItem(menuText);
-                return;
-            }
-
-
-        }
-        // 情况 B：正常挂机状态，卡比随节拍随机乱动
-        else {
-            aiTimer++;
-
-            // 【节奏感核心】：假设游戏 60帧/秒，每 45 帧（约0.75秒，类似一个节拍）改变一次动作
-            if (aiTimer % 26 == 0) {
-                player->isRolling = false;
-                int randNum = rand() % 100;
-
-                if (randNum < 20) {
-                    // 20% 概率向左走
-                    player->vx = -3;
-                    player->facingRight = false;
-                }
-                else if (randNum < 40) {
-                    // 20% 概率向右走
-                    player->vx = 3;
-                    player->facingRight = true;
-                }
-                else if (randNum < 70) {
-                    // 30% 概率跳跃
-                    if (player->isOnGround) {
-                        player->vy = -16;
-                        player->isOnGround = false;
-                    }
-                }
-                else if (randNum < 85) {
-                    // 15% 概率滚动
-                    if (player->isOnGround) {
-                        player->isRolling = true; // 开启滚动状态（触发滚动动画）
-                        player->vx = player->facingRight ? 8 : -8;
-                        player->resetRollAnim();
-                    } else {
-                        player->vx = 0; // 如果在空中就不滚了，原地发呆
-                    }
-                }
-                else {
-                    // 15% 概率呆着不动
-                    player->vx = 0;
-                }
-            }
-
-            // 【范围限制】：别让卡比走出初始屏幕
-            if (player->x() < 200) {
-                player->vx = 3;
-                player->facingRight = true;
-            }
-            if (player->x() > 800) {
-                player->vx = -3;
-                player->facingRight = false;
-            }
-        }
-
-        if (!player->isOnGround) {
-            player->vy += 0.8;          // 正常的重力加速度
-            if (player->vy > 15) player->vy = 15; // 限制最大下落速度
-        }
-
-        player->setPos(player->x() + player->vx, player->y() + player->vy);
-
-        if (player->y() >= 856) {
-            player->setPos(player->x(), 856);
-            player->vy = 0;
-            player->isOnGround = true;
-        }
-
-        player->updateLogic();
-        // 锁定镜头
-        view->centerOn(500, 900);
-        for (QGraphicsRectItem* bg : backgroundLayers) {
-            bg->setPos(500 - bg->rect().width() / 2.0, 0);
-        }
-        return;
-    }
     if (currentState == LevelSelect) {
-        if (keys.contains(Qt::Key_1)) {
+        if (modeSelection == 1) {
+            modeSelection = 0;
             currentState = PLAYING;
-            menuText->setVisible(false); // 隐藏菜单文字
-            loadLevel(1);                // 加载第一关
+            cleanupSelectUI();
+            loadLevel(1);                // 冒险模式 = 第一关
         }
-        else if (keys.contains(Qt::Key_2)) {
+        else if (modeSelection >= 21 && modeSelection <= 23) {
+            pendingBossType = modeSelection - 20;  // 先读！21→1(克苏鲁), 22→2(猪鲨), 23→3(冰雪)
+            modeSelection = 0;                      // 再清0
             currentState = PLAYING;
-            menuText->setVisible(false);
-            loadLevel(2);                // 加载第二关
-        }
-        else if (keys.contains(Qt::Key_3)) {
-            currentState = PLAYING;
-            menuText->setVisible(false);
-            loadLevel(3);                // 加载第三关
+            cleanupSelectUI();
+            loadLevel(99);
         }
         return; // 拦截
     }
+
+    // ====== 结束动画状态 ======
+    	if (currentState == ENDING) {
+        endingAnimTimer++;
+
+        // 锁死相机到固定位置
+        view->centerOn(endingBaseX, endingBaseY);
+
+        // 用固定相机中心直接计算视口四角，确保始终居中不跟随角色
+        qreal halfViewW = view->viewport()->width() / 2.0;
+        qreal halfViewH = view->viewport()->height() / 2.0;
+        qreal cx = endingBaseX - halfViewW;
+        qreal cy = endingBaseY - halfViewH;
+        qreal vw = view->viewport()->width();
+        qreal vh = view->viewport()->height();
+
+        // 阶段0 (4秒): 卡比挥手 + 鸟儿从右向左飞
+        if (endingStage == 0) {
+            // 卡比挥手动画
+            if (endingKirby && !endingKirbyFrames.isEmpty()) {
+                int frame = (endingAnimTimer / 8) % endingKirbyFrames.size();
+                QPixmap scaledFrame = endingKirbyFrames[frame].scaled(130, 130, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                endingKirby->setPixmap(scaledFrame);
+            }
+
+            // 大鸟从右向左直线飞行
+            if (endingBigBird && !endingBigBirdFrames.isEmpty()) {
+                int bf = (endingAnimTimer / 10) % endingBigBirdFrames.size();
+                QPixmap scaledBird = endingBigBirdFrames[bf].scaled(70, 70, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                endingBigBird->setPixmap(scaledBird);
+
+                qreal birdX = cx + vw + 50 - (endingAnimTimer * 4.5);
+                if (birdX < cx - 100) birdX = cx + vw + 50;
+                qreal birdY = cy + vh * 0.42 - 35 + std::sin(endingAnimTimer * 0.05) * 8;
+                endingBigBird->setPos(birdX, birdY);
+            }
+
+            // 小鸟从右向左直线飞行
+            if (endingSmallBird && !endingSmallBirdFrames.isEmpty()) {
+                int sf = (endingAnimTimer / 12) % endingSmallBirdFrames.size();
+                QPixmap scaledBird = endingSmallBirdFrames[sf].scaled(45, 45, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                endingSmallBird->setPixmap(scaledBird);
+
+                qreal sBirdX = cx + vw + 100 - (endingAnimTimer * 5.5);
+                if (sBirdX < cx - 100) sBirdX = cx + vw + 100;
+                qreal sBirdY = cy + vh * 0.42 + 5 + std::cos(endingAnimTimer * 0.04) * 6;
+                endingSmallBird->setPos(sBirdX, sBirdY);
+            }
+
+            if (endingAnimTimer >= 240) {
+                endingAnimTimer = 0;
+                endingStage = 1;
+            }
+        }
+        // 阶段1: ending.png 淡入
+        else if (endingStage == 1) {
+            if (!endingScreen) {
+                QPixmap endingPix(":/tu/jieshudonghua/ending.png");
+                if (!endingPix.isNull()) {
+                    endingScreen = new QGraphicsPixmapItem(
+                        endingPix.scaled(vw, vh, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+                    endingScreen->setPos(cx, cy);
+                    endingScreen->setZValue(3010);
+                    endingScreen->setOpacity(0.0);
+                    scene->addItem(endingScreen);
+                }
+            }
+
+            // 淡入效果 (前30帧从透明到不透明)
+            if (endingScreen) {
+                qreal fadeProgress = qMin(endingAnimTimer / 30.0, 1.0);
+                endingScreen->setOpacity(fadeProgress);
+            }
+
+            // 鸟儿继续飞
+            if (endingBigBird && !endingBigBirdFrames.isEmpty()) {
+                int bf = (endingAnimTimer / 10) % endingBigBirdFrames.size();
+                endingBigBird->setPixmap(endingBigBirdFrames[bf].scaled(70, 70, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                qreal birdX = cx + vw + 50 - (endingAnimTimer * 4.5);
+                if (birdX < cx - 100) birdX = cx + vw + 50;
+                qreal birdY = cy + vh * 0.42 - 35 + std::sin(endingAnimTimer * 0.05) * 8;
+                endingBigBird->setPos(birdX, birdY);
+            }
+            if (endingSmallBird && !endingSmallBirdFrames.isEmpty()) {
+                int sf = (endingAnimTimer / 12) % endingSmallBirdFrames.size();
+                endingSmallBird->setPixmap(endingSmallBirdFrames[sf].scaled(45, 45, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                qreal sBirdX = cx + vw + 100 - (endingAnimTimer * 5.5);
+                if (sBirdX < cx - 100) sBirdX = cx + vw + 100;
+                qreal sBirdY = cy + vh * 0.42 + 5 + std::cos(endingAnimTimer * 0.04) * 6;
+                endingSmallBird->setPos(sBirdX, sBirdY);
+            }
+
+            if (endingAnimTimer >= 120) {
+                endingAnimTimer = 0;
+                endingStage = 2;
+            }
+        }
+        // 阶段2: 显示"回到主菜单"按钮
+        else if (endingStage == 2) {
+            if (!endingMenuBtn) {
+                qreal btnW = 220, btnH = 50;
+                qreal btnX = cx + (SCREEN_W - btnW) / 2.0;
+                qreal btnY = cy + vh - 100;
+
+                endingMenuBtn = new QGraphicsRectItem(btnX, btnY, btnW, btnH);
+                endingMenuBtn->setBrush(QBrush(QColor(30, 50, 90, 210)));
+                endingMenuBtn->setPen(QPen(QColor(80, 120, 220), 2));
+                endingMenuBtn->setZValue(3011);
+                scene->addItem(endingMenuBtn);
+
+                endingMenuBtnText = new QGraphicsTextItem("回到主菜单");
+                endingMenuBtnText->setFont(QFont("SimHei", 18, QFont::Bold));
+                endingMenuBtnText->setDefaultTextColor(Qt::white);
+                endingMenuBtnText->setZValue(3012);
+                qreal tw = endingMenuBtnText->boundingRect().width();
+                endingMenuBtnText->setPos(btnX + (btnW - tw) / 2.0, btnY + 8);
+                scene->addItem(endingMenuBtnText);
+            }
+        }
+        return;
+    }
+
+    // ====== 非游玩状态下跳过游戏逻辑（防止玩家删除后空指针崩溃） ======
+    if (currentState == MAIN_MENU || currentState == SETTINGS || currentState == PAUSED || currentState == GAME_OVER)
+        return;
+
     // 阶段二：按下回车，卡比和地面一起左移
     /*if (currentState == PLAYING) {
         for (Enemy* e : enemies) e->setVisible(true);
@@ -903,6 +1304,9 @@ void MainWindow::gameUpdate() {
         for (Cake* c : cakes) {
             c->setPos(c->x() - moveSpeed, c->y());
         }
+        for (Star* s : stars) {
+            s->setPos(s->x() - moveSpeed, s->y());
+        }
         for (Checkpoint* cc : checkpoints){
             cc->setPos(cc->x() - moveSpeed, cc->y());
         }
@@ -921,6 +1325,9 @@ void MainWindow::gameUpdate() {
             }
             for (Cake* c : cakes) {
                 c->setPos(c->x() + errorX, c->y());
+            }
+            for (Star* s : stars) {
+                s->setPos(s->x() + errorX, s->y());
             }
             player->setPos(100, 856); // 完美归位
 
@@ -1127,13 +1534,6 @@ void MainWindow::gameUpdate() {
             }
         }
 
-        // 4. 水下移动扣除体力
-        if (keys.contains(Qt::Key_W) || keys.contains(Qt::Key_A) || keys.contains(Qt::Key_D)) {
-            player->stamina-=1.5;
-            if (player->stamina <= 0) {
-                player->hp = 0;
-            }
-        }
     }
     else if (!player->isOnGround&& !player->isLightningFlying) {
         if (player->isHovering && player->vy > 0) {
@@ -1206,8 +1606,10 @@ void MainWindow::gameUpdate() {
         }
     }
     // 替换原有的 constFloors 遍历为倒序遍历
+    {   QRectF pz = player->sceneBoundingRect().adjusted(-100,-100,100,50);
     for (int i = floors.size() - 1; i >= 0; i--) {
         Tile *tile = floors[i];
+        if (!tile->sceneBoundingRect().intersects(pz)) continue;
         if (player->collidesWithItem(tile)) {
 
             // ====== 技能互动：火形态疾跑撞击特殊方块 ======
@@ -1251,14 +1653,17 @@ void MainWindow::gameUpdate() {
             }
         }
     }
+    }
 
     // 5. 垂直检测
     bool onGround = false;
 
     // A. 预判地面 (向下探测1像素)
     player->setPos(player->x(), player->y() + 1);
+    {   QRectF pz = player->sceneBoundingRect().adjusted(-100,-100,100,50);
     for (int i = floors.size() - 1; i >= 0; i--) {
         Tile *tile = floors[i];
+        if (!tile->sceneBoundingRect().intersects(pz)) continue;
         if (player->collidesWithItem(tile)) {
 
             // ====== 技能互动：火形态疾跑上下方向融冰与炸石 ======
@@ -1289,12 +1694,15 @@ void MainWindow::gameUpdate() {
             break; // 踩到一块实心方块就跳出检测
         }
     }
+    }
 
     // B. 正式垂直移动与碰撞
     if (!onGround) {
         player->setPos(player->x(), player->y() - 1 + player->vy);
+        { QRectF pz = player->sceneBoundingRect().adjusted(-100,-100,100,50);
         for (int i = floors.size() - 1; i >= 0; i--) {
             Tile *tile = floors[i];
+            if (!tile->sceneBoundingRect().intersects(pz)) continue;
             if (player->collidesWithItem(tile)) {
 
                 // ====== 技能互动：火形态疾跑上下方向融冰与炸石 ======
@@ -1325,8 +1733,28 @@ void MainWindow::gameUpdate() {
                 }
             }
         }
+        }
     }
     player->isOnGround = onGround;
+    // ====== 体力消耗：使用中心点检测水中状态（避免边界误触） ======
+    {
+        bool finalInWater = false;
+        QPointF playerCenter = player->sceneBoundingRect().center();
+        for (Tile* tile : waters) {
+            if (tile->sceneBoundingRect().contains(playerCenter)) {
+                finalInWater = true;
+                break;
+            }
+        }
+        if (finalInWater) {
+            if (keys.contains(Qt::Key_W) || keys.contains(Qt::Key_A) || keys.contains(Qt::Key_D)) {
+                player->stamina -= 1.5;
+                if (player->stamina <= 0) {
+                    player->hp = 0;
+                }
+            }
+        }
+    }
     // 6. 翻滚结束判定
     if (player->isRolling) {
         player->rollTimer--;
@@ -1341,6 +1769,39 @@ void MainWindow::gameUpdate() {
     player->updateLogic();
     view->centerOn(player);
 
+    // ====== 浮动文字触发与更新 ======
+    for (auto& t : tutorialTriggers) {
+        if (!t.shown && player && player->x() >= t.triggerX)
+            triggerTutorialText(&t);
+    }
+    updateTutorialTexts();
+
+    // ====== 脚步音效 ======
+    {
+        bool shouldStep = (player->currentState == Player::WALKING || player->currentState == Player::FATTY_WALKING)
+                          && player->isOnGround;
+        if (shouldStep && stepPlayer->playbackState() != QMediaPlayer::PlayingState)
+            stepPlayer->play();
+        else if (!shouldStep && stepPlayer->playbackState() == QMediaPlayer::PlayingState)
+            stepPlayer->stop();
+    }
+
+    // ====== 水声循环 ======
+    {
+        if (player->inWater && waterPlayer->playbackState() != QMediaPlayer::PlayingState)
+            waterPlayer->play();
+        else if (!player->inWater && waterPlayer->playbackState() == QMediaPlayer::PlayingState)
+            waterPlayer->stop();
+    }
+
+    // ====== 火形态爆炸音效（边缘检测，仅爆炸开始时播一次） ======
+    if (player->isExploding && !prevExploding) {
+        sfxPlayer->setSource(QUrl("qrc:///tu/music/JDSherbert - Pixel Explosions SFX Pack - EMP (1).mp3"));
+        sfxAudio->setVolume(0.5);
+        sfxPlayer->play();
+    }
+    prevExploding = player->isExploding;
+
 
     // ====== 运动方块更新（会动的刺等） ======
     for (Tile* tile : floors) {
@@ -1354,51 +1815,19 @@ void MainWindow::gameUpdate() {
         // 1. 更新敌人自身逻辑 (决定 vx 和动画)
         enemy->updateLogic();
 
-        // 2. 水平移动与墙壁碰撞（Boss无视地形）
-        enemy->setPos(enemy->x() + enemy->vx, enemy->y());
         if (!enemy->ignoresTiles) {
-            // 4. 核心逻辑：撞墙，或者前方是悬崖（没地了），立刻掉头
-            QRectF eRect = enemy->sceneBoundingRect();
-            for (Tile *tile : floors) {
-                QRectF tRect = tile->sceneBoundingRect();
-                if (enemy->collidesWithItem(tile)) {
-                    // 物理阻挡
-                    if (enemy->vx > 0) {
-                        enemy->setPos(tRect.left() - eRect.width(), enemy->y());
-                    } else if (enemy->vx < 0) {
-                        enemy->setPos(tRect.right(), enemy->y());
-                    }
-                    // 撞墙后掉头
-                    enemy->reverseDirection();
-                    break;
-                }
-            }
-            qreal lookAheadX = (enemy->vx > 0) ? eRect.right() + 7 : eRect.left() - 7;
-            qreal footY = eRect.bottom() + 5; // 往脚底下偏离2个像素，确保能踩到地面
-            QPointF checkPoint(lookAheadX, footY);
+            bool alreadyReversed = false;
 
-            bool hasFloorAhead = false;
-            for (Tile *tile : floors) {
-                // 检查这个探测点是否在某个地面方块的矩形内
-                if (tile->sceneBoundingRect().contains(checkPoint)) {
-                    hasFloorAhead = true;
-                    break; // 前方有地基，安全
-                }
-            }
-
-            // 如果前方没有地面，说明到边缘了，掉头
-            if (!hasFloorAhead) {
-                enemy->reverseDirection();
-            }
-
-            // 3. 应用重力 (自由落体算法)
+            // 2. 先应用重力 (自由落体算法)
             enemy->vy += 0.8;
-            if (enemy->vy > 15) enemy->vy = 15; // 终端速度限制
+            if (enemy->vy > 15) enemy->vy = 15;
 
-            // 4. 垂直移动与地面碰撞
+            // 3. 垂直移动与地面碰撞（先垂直后水平，防止地面误判为墙壁导致抖动）
             enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
-            eRect = enemy->sceneBoundingRect();
+            QRectF eRect = enemy->sceneBoundingRect();
+            { QRectF ez = eRect.adjusted(-100,-100,100,50);
             for (Tile *tile : floors) {
+                if (!tile->sceneBoundingRect().intersects(ez)) continue;
                 if (enemy->collidesWithItem(tile)) {
                     QRectF tRect = tile->sceneBoundingRect();
                     if (enemy->vy > 0) { // 往下掉时踩到地板
@@ -1408,8 +1837,56 @@ void MainWindow::gameUpdate() {
                     break;
                 }
             }
+            }
+
+            // 4. 水平移动与墙壁碰撞（reversesOnCollision=false时跳过，防止Boss小怪卡墙抖动）
+            enemy->setPos(enemy->x() + enemy->vx, enemy->y());
+            if (enemy->reversesOnCollision) {
+                eRect = enemy->sceneBoundingRect();
+                { QRectF ez = eRect.adjusted(-100,-100,100,50);
+                for (Tile *tile : floors) {
+                    if (!tile->sceneBoundingRect().intersects(ez)) continue;
+                    QRectF tRect = tile->sceneBoundingRect();
+                    if (enemy->collidesWithItem(tile)) {
+                        // 物理阻挡
+                        if (enemy->vx > 0) {
+                            enemy->setPos(tRect.left() - eRect.width(), enemy->y());
+                        } else if (enemy->vx < 0) {
+                            enemy->setPos(tRect.right(), enemy->y());
+                        }
+                        // 撞墙后掉头（用本地标记防止同帧内重复掉头）
+                        if (!alreadyReversed) {
+                            enemy->reverseDirection();
+                            alreadyReversed = true;
+                        }
+                        break;
+                    }
+                }
+                }
+                qreal lookAheadX = (enemy->vx > 0) ? eRect.right() + 7 : eRect.left() - 7;
+                qreal footY = eRect.bottom() + 5;
+                QPointF checkPoint(lookAheadX, footY);
+
+                bool hasFloorAhead = false;
+                { QRectF cz(checkPoint.x() - 1, checkPoint.y() - 1, 2, 2);
+                for (Tile *tile : floors) {
+                    if (!tile->sceneBoundingRect().intersects(cz)) continue;
+                    if (tile->sceneBoundingRect().contains(checkPoint)) {
+                        hasFloorAhead = true;
+                        break;
+                    }
+                }
+                }
+
+                // 如果前方没有地面，到边缘掉头
+                if (!hasFloorAhead && !alreadyReversed) {
+                    enemy->reverseDirection();
+                    alreadyReversed = true;
+                }
+            }
         } else {
-            // Boss无视地形，直接应用vy（飞行类Boss自己控制vy）
+            // Boss无视地形，直接应用速度
+            enemy->setPos(enemy->x() + enemy->vx, enemy->y());
             enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
         }
     }
@@ -1422,10 +1899,18 @@ void MainWindow::gameUpdate() {
     qreal halfViewW = view->viewport()->width() / 2.0;
 
     // 2. 边界检查
-    if (cameraX < halfViewW) {
-        cameraX = halfViewW;
-    } else if (cameraX > sceneW - halfViewW) {
-        cameraX = sceneW - halfViewW;
+    {
+        qreal rightBound = sceneW;
+        // Boss战地图限制相机范围
+        if (currentLevelNum == 99) {
+            qreal levelW = 80 * renderSize;
+            rightBound = levelW;
+        }
+        if (cameraX < halfViewW) {
+            cameraX = halfViewW;
+        } else if (cameraX > rightBound - halfViewW) {
+            cameraX = rightBound - halfViewW;
+        }
     }
 
     // 3. 执行视角居中并加入【震屏特效】
@@ -1438,46 +1923,146 @@ void MainWindow::gameUpdate() {
         renderY += (rand() % 17) - 8;
     }
 
+    // Boss登场屏幕震荡（必须在 centerOn 之前修改 renderX/renderY）
+    if (bossIntroActive && bossIntroTimer >= 120) {
+        int intensity = qMin(12, 4 + bossIntroTimer / 10);
+        renderX += (rand() % (intensity*2+1)) - intensity;
+        renderY += (rand() % (intensity*2+1)) - intensity;
+    }
+
     view->centerOn(renderX, renderY);
 
-    // 4. 背景图层跟随“锁定后且未震动”的相机坐标
+    // 4. 背景图层跟随”锁定后且未震动”的相机坐标
     // 这样背景不会跟着画面一起疯狂乱抖，产生极好的纵深对比感
     for (QGraphicsRectItem* bg : backgroundLayers) {
         qreal bgX = cameraX - bg->rect().width() / 2.0;
         bg->setPos(bgX, 0);
     }
+    for (QGraphicsRectItem* bg : phase2BgLayers) {
+        qreal bgX = cameraX - bg->rect().width() / 2.0;
+        bg->setPos(bgX, 0);
+    }
 
-    // ====== Boss动态生成（战斗关卡：玩家靠近末尾时创建Boss） ======
-    if (pendingBossType > 0 && !bossSpawned && player && player->x() > bossSpawnX - 300) {
-        if (pendingBossType == 1) {
-            brainOfCthulhu = new BrainOfCthulhu(player);
-            brainOfCthulhu->setPos(bossSpawnX, bossSpawnY);
-            brainOfCthulhu->setVisible(false);
-            scene->addItem(brainOfCthulhu);
-            enemies.append(brainOfCthulhu);
-        } else if (pendingBossType == 2) {
-            dukeFishron = new DukeFishron(player);
-            dukeFishron->setPos(bossSpawnX, bossSpawnY);
-            dukeFishron->setVisible(false);
-            scene->addItem(dukeFishron);
-            enemies.append(dukeFishron);
+    // ====== Boss动态生成：开始登场动画 ======
+    if (pendingBossType > 0 && !bossSpawned && !bossIntroActive && player && player->x() > bossSpawnX - 300) {
+        bossIntroActive = true;
+        bossIntroTimer = 0;
+    }
+
+    // ====== Boss登场动画流程 ======
+    if (bossIntroActive) {
+        bossIntroTimer++;
+
+        // 阶段1：前2秒安静等待
+        if (bossIntroTimer == 120) {
+            // 停止BGM
+            bgmPlayer->stop();
+
+            // 播放 horror stinger
+            bossStingerPlayer->setSource(QUrl("qrc:///tu/music/horror_01_stinger_impact_glitch_01.ogg"));
+            bossStingerAudio->setVolume(volumeLevel);
+            bossStingerPlayer->play();
+
+            // 红色遮罩（大幅超出屏幕范围，防止边缘露出）
+            bossIntroOverlay = new QGraphicsRectItem(0, 0, SCREEN_W + 1000, SCREEN_H + 1000);
+            bossIntroOverlay->setBrush(QBrush(QColor(180, 0, 0, 120)));
+            bossIntroOverlay->setPen(Qt::NoPen);
+            bossIntroOverlay->setZValue(3000);
+            scene->addItem(bossIntroOverlay);
+
+            // 巨大白色感叹号
+            bossIntroExclamation = new QGraphicsTextItem("!");
+            bossIntroExclamation->setFont(QFont("Arial Black", 140, QFont::Bold));
+            bossIntroExclamation->setDefaultTextColor(QColor(255, 255, 255));
+            bossIntroExclamation->setZValue(3001);
+            double ew = bossIntroExclamation->boundingRect().width();
+            bossIntroExclamation->setPos(cameraX - ew/2.0, cameraY - 70);
+            scene->addItem(bossIntroExclamation);
         }
-        bossSpawned = true;
-    }
 
-    // ====== Boss接近激活 ======
-    const qreal bossActDist = 600;
-    if (brainOfCthulhu && !brainOfCthulhu->isDead && !brainOfCthulhu->isVisible()) {
-        if (qAbs(player->x() - brainOfCthulhu->x()) < bossActDist)
-            brainOfCthulhu->setVisible(true);
-    }
-    if (dukeFishron && !dukeFishron->isDead && !dukeFishron->isVisible()) {
-        if (qAbs(player->x() - dukeFishron->x()) < bossActDist)
-            dukeFishron->setVisible(true);
-    }
-    if (iceGod && !iceGod->isDead && !iceGod->isVisible()) {
-        if (qAbs(player->x() - iceGod->x()) < bossActDist)
-            iceGod->setVisible(true);
+        // 每帧更新遮罩和感叹号位置（跟随镜头）
+        if (bossIntroOverlay) {
+            bossIntroOverlay->setPos(cameraX - halfViewW - 500, cameraY - SCREEN_H/2.0 - 500);
+        }
+        if (bossIntroExclamation) {
+            double ew = bossIntroExclamation->boundingRect().width();
+            bossIntroExclamation->setPos(cameraX - ew/2.0, cameraY - 70);
+        }
+
+        // 阶段2：3秒后（总5秒）生成Boss，切换音乐
+        if (bossIntroTimer == 300) {
+            // 生成Boss
+            if (pendingBossType == 1) {
+                brainOfCthulhu = new BrainOfCthulhu(player);
+                brainOfCthulhu->setPos(bossSpawnX, bossSpawnY);
+                brainOfCthulhu->setVisible(true);
+                scene->addItem(brainOfCthulhu);
+                enemies.append(brainOfCthulhu);
+            } else if (pendingBossType == 2) {
+                dukeFishron = new DukeFishron(player);
+                dukeFishron->setPos(bossSpawnX, bossSpawnY);
+                dukeFishron->setVisible(true);
+                scene->addItem(dukeFishron);
+                enemies.append(dukeFishron);
+            } else if (pendingBossType == 3) {
+                iceGod = new IceGod(player);
+                iceGod->setPos(bossSpawnX, bossSpawnY);
+                iceGod->setVisible(true);
+                scene->addItem(iceGod);
+                enemies.append(iceGod);
+            }
+            bossSpawned = true;
+
+            // Boss登场时立刻在屏幕边缘生成一只元素小怪
+            {
+                Enemy::CopyAbility abilities[] = {Enemy::FIRE, Enemy::ICE, Enemy::LEAF, Enemy::SPARK};
+                int idx = rand() % 4;
+                Enemy::CopyAbility abil = abilities[idx];
+                QString path;
+                int frames = 6;
+                double spd = 1.5, sc = 0.6;
+                switch (abil) {
+                case Enemy::FIRE:  path=":/tu/fire_enemy.png"; frames=5; spd=1.5; sc=2.0; break;
+                case Enemy::ICE:   path=":/tu/Ice_Dude.png"; frames=6; spd=1.2; sc=0.6; break;
+                case Enemy::LEAF:  path=":/tu/Leaf_Dude.png"; frames=8; spd=1.0; sc=0.6; break;
+                case Enemy::SPARK: path=":/tu/Lightning_Dude.png"; frames=6; spd=1.8; sc=0.6; break;
+                default: path=":/tu/Ice_Dude.png"; break;
+                }
+                bool left = rand() % 2 == 0;
+                qreal sx = left ? (cameraX - halfViewW + 24) : (cameraX + halfViewW - 24);
+                MinionEnemy* m = new MinionEnemy(path, frames, spd, abil);
+                m->setScale(sc);
+                m->setPatrolDuration(999999); // 禁用巡逻转向，仅靠悬崖检测
+                m->setPos(sx, 0);
+                scene->addItem(m);
+                enemies.append(m);
+                qreal eh = m->sceneBoundingRect().height();
+                qreal gt = 1200;
+                for (Tile* t : floors) {
+                    QRectF tr = t->sceneBoundingRect();
+                    if (sx >= tr.left() && sx <= tr.right() && tr.top() < gt) gt = tr.top();
+                }
+                m->setPos(sx, gt - eh);
+                // 朝向屏幕内侧移动（左边缘→朝右，右边缘→朝左）避免悬崖检测抖动
+                if (left && !m->isFacingRight()) m->reverseDirection();
+                else if (!left && m->isFacingRight()) m->reverseDirection();
+            }
+
+            // 停止 horror stinger
+            bossStingerPlayer->stop();
+
+            // 随机播放一首RPG战斗音乐并循环
+            int idx = rand() % bossMusicTracks.size();
+            bgmPlayer->setSource(QUrl(bossMusicTracks[idx]));
+            bgmPlayer->setLoops(QMediaPlayer::Infinite);
+            bgmPlayer->play();
+
+            // 清理登场特效
+            if (bossIntroOverlay) { scene->removeItem(bossIntroOverlay); delete bossIntroOverlay; bossIntroOverlay = nullptr; }
+            if (bossIntroExclamation) { scene->removeItem(bossIntroExclamation); delete bossIntroExclamation; bossIntroExclamation = nullptr; }
+            bossIntroActive = false;
+            bossIntroTimer = 0;
+        }
     }
 
     // ====== Boss血条（屏幕右上角HUD） ======
@@ -1498,7 +2083,7 @@ void MainWindow::gameUpdate() {
         double barW = 120.0;
         double barH = 10.0;
         double barX = cameraX + halfViewW - barW - 20;
-        double barY = cameraY - view->viewport()->height() / 1.2 + 20;
+        double barY = cameraY - view->viewport()->height() / 2.0 + 20;
         bossHpBarBg->setVisible(true);
         bossHpBarBg->setRect(0, 0, barW, barH);
         bossHpBarBg->setPos(barX, barY);
@@ -1507,31 +2092,158 @@ void MainWindow::gameUpdate() {
         if (ratio < 0) ratio = 0;
         bossHpBarFg->setRect(0, 0, barW * ratio, barH);
         bossHpBarFg->setPos(barX, barY);
+        // 猪鲨根据阶段改变血条颜色
+        if (activeBoss == dukeFishron) {
+            if (dukeFishron->isPhase3)
+                bossHpBarFg->setBrush(QBrush(QColor(255, 100, 50)));  // 橙色
+            else if (dukeFishron->isPhase2)
+                bossHpBarFg->setBrush(QBrush(QColor(100, 150, 255))); // 蓝色
+            else
+                bossHpBarFg->setBrush(QBrush(QColor(220, 30, 30)));   // 红色（一阶段）
+        } else {
+            bossHpBarFg->setBrush(QBrush(QColor(220, 30, 30)));       // 红色
+        }
     } else {
         if (bossHpBarBg) bossHpBarBg->setVisible(false);
         if (bossHpBarFg) bossHpBarFg->setVisible(false);
     }
 
-    // ====== 技能冷却HUD (右下角) ======
-    int cooldown = 0;
-    QString cdLabel;
-    switch (player->currentForm) {
-        case Enemy::FIRE: cooldown = player->fireSkillCooldownTimer; cdLabel = "火疾跑"; break;
-        case Enemy::ICE:  cooldown = player->iceDefendCooldownTimer; cdLabel = "冰防御"; break;
-        case Enemy::LEAF: cooldown = player->leafSkillCooldownTimer; cdLabel = "叶羽毛"; break;
-        default: break;
-    }
-    if (cooldown > 0) {
-        int sec = (cooldown + 59) / 60;
-        cooldownText->setPlainText(QString("%1: %2s").arg(cdLabel).arg(sec));
-        qreal scrRight  = cameraX + halfViewW;
-        qreal scrBottom = cameraY + view->viewport()->height() / 2.0;
-        qreal tw = cooldownText->boundingRect().width();
-        qreal th = cooldownText->boundingRect().height();
-        cooldownText->setPos(scrRight - tw - 20, scrBottom - th - 20);
-        cooldownText->setVisible(true);
+    // ====== Boss战每30秒在屏幕左右随机生成属性小怪 ======
+    if (activeBoss && activeBoss->hp > 0) {
+        bossMinionSpawnTimer++;
+        if (bossMinionSpawnTimer >= 1800) { // 30秒 = 1800帧 (60fps)
+            bossMinionSpawnTimer = 0;
+
+            // 随机属性
+            Enemy::CopyAbility abilities[] = {Enemy::FIRE, Enemy::ICE, Enemy::LEAF, Enemy::SPARK};
+            int idx = rand() % 4;
+            Enemy::CopyAbility ability = abilities[idx];
+
+            // 根据属性选贴图/帧数/速度/缩放
+            QString spritePath;
+            int frames = 6;
+            double speed = 1.5;
+            double scale = 0.6;
+            switch (ability) {
+            case Enemy::FIRE:
+                spritePath = ":/tu/fire_enemy.png"; frames = 5; speed = 1.5; scale = 2.0; break;
+            case Enemy::ICE:
+                spritePath = ":/tu/Ice_Dude.png";  frames = 6; speed = 1.2; scale = 0.6; break;
+            case Enemy::LEAF:
+                spritePath = ":/tu/Leaf_Dude.png"; frames = 8; speed = 1.0; scale = 0.6; break;
+            case Enemy::SPARK:
+                spritePath = ":/tu/Lightning_Dude.png"; frames = 6; speed = 1.8; scale = 0.6; break;
+            default:
+                spritePath = ":/tu/Ice_Dude.png"; break;
+            }
+
+            // 随机左右侧，在屏幕边缘生成（在屏幕内，确保地面存在）
+            bool spawnLeft = rand() % 2 == 0;
+            qreal spawnX = spawnLeft ? (cameraX - halfViewW + 24) : (cameraX + halfViewW - 24);
+
+            // 先创建小怪并加到场景，获取其碰撞高度
+            MinionEnemy* minion = new MinionEnemy(spritePath, frames, speed, ability);
+            minion->setScale(scale);
+            minion->setPatrolDuration(999999); // 禁用巡逻转向
+            minion->reversesOnCollision = false; // 取消撞墙/悬崖回头，防止抖动
+            minion->setPos(spawnX, 0);
+            scene->addItem(minion);
+            enemies.append(minion);
+
+            // 扫描地面，找到脚下的地板顶部Y，直接站在上面（避免重力落地和悬崖检测抖动）
+            qreal enemyH = minion->sceneBoundingRect().height();
+            qreal groundTop = 1200; // 兜底
+            for (Tile* tile : floors) {
+                QRectF tr = tile->sceneBoundingRect();
+                if (spawnX >= tr.left() && spawnX <= tr.right()) {
+                    if (tr.top() < groundTop) {
+                        groundTop = tr.top();
+                    }
+                }
+            }
+            minion->setPos(spawnX, groundTop - enemyH);
+            // 朝向屏幕内侧移动（左边缘→朝右，右边缘→朝左）避免悬崖检测抖动
+            if (spawnLeft && !minion->isFacingRight()) minion->reverseDirection();
+            else if (!spawnLeft && minion->isFacingRight()) minion->reverseDirection();
+        }
     } else {
-        cooldownText->setVisible(false);
+        bossMinionSpawnTimer = 0;
+    }
+
+    // ====== Boss战星星生成（每5-10秒生成一颗） ======
+    if (activeBoss && activeBoss->hp > 0) {
+        bossStarSpawnTimer++;
+        int interval = 300 + (rand() % 300); // 5~10秒随机间隔
+        if (bossStarSpawnTimer >= interval) {
+            bossStarSpawnTimer = 0;
+
+            // 在屏幕可见范围内随机X位置生成星星
+            qreal sx = cameraX - halfViewW + 50 + (rand() % (int)(SCREEN_W - 100));
+            Star* star = new Star();
+            star->setPos(sx, cameraY - halfViewW); // 屏幕顶部上方生成
+            scene->addItem(star);
+            stars.append(star);
+        }
+    } else {
+        bossStarSpawnTimer = 0;
+    }
+
+    // ====== DukeFishron二阶段背景过渡（60帧交叉淡入淡出） ======
+    if (dukeFishron && dukeFishron->phase2BgTriggered && !dukePhase2BgStarted) {
+        dukePhase2BgStarted = true;
+        phase2BgFadeTimer = 0;
+    }
+    if (dukePhase2BgStarted && phase2BgFadeTimer < 60) {
+        phase2BgFadeTimer++;
+        double t = phase2BgFadeTimer / 60.0;
+        for (QGraphicsRectItem* bg : backgroundLayers) {
+            bg->setOpacity(1.0 - t);
+        }
+        for (QGraphicsRectItem* bg : phase2BgLayers) {
+            bg->setOpacity(t);
+        }
+    }
+
+    // ====== 形态技能冷却图标 (左下角) ======
+    // 先隐藏所有图标
+    if (fireCdIcon) fireCdIcon->setVisible(false);
+    if (iceCdIcon)  iceCdIcon->setVisible(false);
+    if (leafCdIcon) leafCdIcon->setVisible(false);
+    if (cooldownText) cooldownText->setVisible(false);
+
+    // 根据当前形态显示对应的冷却图标
+    auto showCdIcon = [&](QGraphicsPixmapItem* icon, int cdTimer, const QString &label) {
+        // 后备：如果图标无效或图片为空，用文字显示
+        if (!icon || icon->pixmap().isNull()) {
+            if (cooldownText) {
+                QString text = (cdTimer > 0)
+                    ? QString("%1: %2s").arg(label).arg((cdTimer + 59) / 60)
+                    : label + ": 就绪";
+                cooldownText->setPlainText(text);
+                qreal scrRight  = cameraX + halfViewW;
+                qreal scrBottom = cameraY + view->viewport()->height() / 2.0;
+                qreal tw = cooldownText->boundingRect().width();
+                qreal th = cooldownText->boundingRect().height();
+                cooldownText->setPos(scrRight - tw - 20, scrBottom - th - 20);
+                cooldownText->setDefaultTextColor((cdTimer > 0) ? Qt::gray : QColor(255, 255, 200));
+                cooldownText->setVisible(true);
+            }
+            return;
+        }
+        // 固定在左下角
+        qreal screenLeft = cameraX - halfViewW;
+        qreal screenBottom = cameraY + view->viewport()->height() / 2.0;
+        icon->setPos(screenLeft + 20, screenBottom - 60);
+        icon->setVisible(true);
+        // 冷却中变暗淡，可用时高亮
+        icon->setOpacity((cdTimer > 0) ? 0.35 : 1.0);
+    };
+
+    switch (player->currentForm) {
+        case Enemy::FIRE: showCdIcon(fireCdIcon, player->fireSkillCooldownTimer, "火疾跑"); break;
+        case Enemy::ICE:  showCdIcon(iceCdIcon,  player->iceDefendCooldownTimer, "冰防御"); break;
+        case Enemy::LEAF: showCdIcon(leafCdIcon, player->leafSkillCooldownTimer, "叶羽毛"); break;
+        default: break;
     }
 
     // ====== 消费IceGod新召唤的雪花 ======
@@ -1557,6 +2269,60 @@ void MainWindow::gameUpdate() {
             projectiles.append(p);
         }
         iceGod->pendingProjectiles.clear();
+    }
+
+    // ====== 消费猪鲨待发射弹幕 ======
+    if (dukeFishron && !dukeFishron->isDead && dukeFishron->isPhase2) {
+        for (Projectile* p : dukeFishron->pendingProjectiles) {
+            scene->addItem(p);
+            projectiles.append(p);
+        }
+        dukeFishron->pendingProjectiles.clear();
+    }
+
+    // ====== 猪鲨二阶段：处理水转换 ======
+    if (dukeFishron && !dukeFishron->isDead && dukeFishron->isPhase2) {
+        // 1. 处理待转换水块
+        for (Tile* tile : dukeFishron->pendingWaterConversions) {
+            int idx = floors.indexOf(tile);
+            if (idx >= 0) {
+                Tile::TileType origType = tile->tileType();
+                QPixmap origPix = tile->pixmap();
+                tile->changeType(Tile::WaterBody, waterBodyPix);
+                waters.append(tile);
+                floors.removeAt(idx);
+                DukeFishron::WaterChangeRecord rec;
+                rec.tile = tile;
+                rec.originalType = origType;
+                rec.originalPixmap = origPix;
+                rec.timer = 0;
+                dukeFishron->activeWaterChanges.append(rec);
+            }
+        }
+        dukeFishron->pendingWaterConversions.clear();
+
+        // 2. 处理活跃水块计时器（600帧=10秒后恢复）
+        for (int i = dukeFishron->activeWaterChanges.size() - 1; i >= 0; i--) {
+            auto& rec = dukeFishron->activeWaterChanges[i];
+            rec.timer++;
+            if (rec.timer >= 600) {
+                rec.tile->changeType(rec.originalType, rec.originalPixmap);
+                waters.removeOne(rec.tile);
+                floors.append(rec.tile);
+                dukeFishron->activeWaterChanges.removeAt(i);
+            }
+        }
+    }
+
+    // ====== 猪鲨死亡或进入三阶段：清理所有残留水块 ======
+    if (dukeFishron && (dukeFishron->isDead || dukeFishron->isPhase3) && !dukeFishron->activeWaterChanges.isEmpty()) {
+        for (auto& rec : dukeFishron->activeWaterChanges) {
+            rec.tile->changeType(rec.originalType, rec.originalPixmap);
+            waters.removeOne(rec.tile);
+            floors.append(rec.tile);
+        }
+        dukeFishron->activeWaterChanges.clear();
+        dukeFishron->pendingWaterConversions.clear();
     }
 
     // ====== 子弹逻辑与伤害判定 ======
@@ -1586,20 +2352,25 @@ void MainWindow::gameUpdate() {
         }
 
 
-        // 2. 新增：检测是否撞到实体方块
-        if (!hitEnemy) { // 如果已经打中敌人了，就不需要再检测撞墙了
+        // 2. 新增：检测是否撞到实体方块（Boss弹幕无视地形）
+        if (!hitEnemy && !proj->ignoresWalls) { // 如果已经打中敌人了，就不需要再检测撞墙了
+            QRectF projZ = proj->sceneBoundingRect().adjusted(-50,-50,50,50);
             for (Tile *tile : floors) {
+                if (!tile->sceneBoundingRect().intersects(projZ)) continue;
                 // 只要子弹碰到了 floors 列表里的方块（实体墙、草地、石头等）
                 if (proj->collidesWithItem(tile)) {
                     hitWall = true;
                     break;
                 }
             }
-            for (Tile *tile : waters) {
-                // 只要子弹碰到了 floors 列表里的方块（实体墙、草地、石头等）
-                if (proj->collidesWithItem(tile)) {
-                    hitWall = true;
-                    break;
+            if (!hitWall) {
+                for (Tile *tile : waters) {
+                    if (!tile->sceneBoundingRect().intersects(projZ)) continue;
+                    // 只要子弹碰到了 floors 列表里的方块（实体墙、草地、石头等）
+                    if (proj->collidesWithItem(tile)) {
+                        hitWall = true;
+                        break;
+                    }
                 }
             }
         }
@@ -1608,9 +2379,13 @@ void MainWindow::gameUpdate() {
         if (proj->hurtsPlayer && player->invulnTimer == 0 && player->hp > 0) {
             if (proj->collidesWithItem(player)) {
                 hitPlayer = true;
-                if (!player->isRolling && !player->isSwallowing && !player->isIceDefending) {
+                if (!player->isRolling && !player->isIceDefending && !player->isExploding) {
                     player->hp--;
-                    player->invulnTimer = 60;
+                    // 扣血音效
+                    sfxPlayer->setSource(QUrl("qrc:///tu/music/sitar_negative_quick.wav"));
+                    sfxAudio->setVolume(0.5);
+                    sfxPlayer->play();
+                    player->invulnTimer = 90;
                     player->vy = -4;
                 }
             }
@@ -1623,31 +2398,59 @@ void MainWindow::gameUpdate() {
             delete proj;
         }
     }
-    // ====== 玩家与刺的碰撞检测 ======
+    // ====== 玩家与刺的碰撞检测（使用三角形内接最大矩形作为碰撞盒） ======
     if (player->invulnTimer == 0 && player->hp > 0) {
-        QRectF pRect = player->sceneBoundingRect();
 
         for (Tile* spike : spikes) {
-            QRectF sRect = spike->sceneBoundingRect();
 
-            if (pRect.intersects(sRect)) {
+            // 计算尖刺三角形内接最大长方形碰撞盒
+            QRectF sRect = spike->sceneBoundingRect();
+            bool isWallSpike = (sRect.height() > sRect.width() * 2.5);
+            QRectF spikeHitbox = isWallSpike
+                ? QRectF(sRect.left() + sRect.width() / 2.0,
+                         sRect.top() + sRect.height() / 4.0,
+                         sRect.width() / 2.0,
+                         sRect.height() / 2.0)
+                : QRectF(sRect.left() + sRect.width() / 4.0,
+                         sRect.top() + sRect.height() / 2.0,
+                         sRect.width() / 2.0,
+                         sRect.height() / 2.0);
+
+            if (player->sceneBoundingRect().intersects(spikeHitbox)) {
 
                 // 技能免伤保护
-                if (player->isRolling || player->isSwallowing ||
-                    player->isIceDefending || player->isExploding) {
+                if (player->isRolling || player->isIceDefending || player->isExploding) {
                     continue;
                 }
 
                 // 触发扣血
                 player->hp--;
-                player->invulnTimer = 60;
+                // 扣血音效
+                sfxPlayer->setSource(QUrl("qrc:///tu/music/sitar_negative_quick.wav"));
+                sfxAudio->setVolume(0.5);
+                sfxPlayer->play();
+                player->invulnTimer = 90;
                 player->vy = -6; // 受击向上弹
 
-                // 根据卡比朝向，精准反向弹飞，防止卡在刺里连续扣血
-                if (player->facingRight) {
-                    player->setPos(player->x() - 15, player->y());
-                } else {
-                    player->setPos(player->x() + 15, player->y());
+                // 根据速度方向反向弹飞（防卡墙）
+                {
+                    double pushX = 8;
+                    double newX = (player->vx > 0) ? player->x() - pushX : player->x() + pushX;
+                    player->setPos(newX, player->y());
+                    // 如果弹飞后卡进墙里，改为向上弹
+                    bool stuck = false;
+                    { QRectF pz2 = player->sceneBoundingRect().adjusted(-10,-10,10,10);
+                    for (Tile* tile : floors) {
+                        if (!tile->sceneBoundingRect().intersects(pz2)) continue;
+                        if (player->collidesWithItem(tile)) {
+                            stuck = true;
+                            break;
+                        }
+                    }
+                    }
+                    if (stuck) {
+                        player->setPos(player->x(), player->y() - pushX);
+                    }
                 }
                 break;
             }
@@ -1664,10 +2467,10 @@ void MainWindow::gameUpdate() {
             // 只有活着的目标才能对玩家造成伤害
             if (!enemy->isDead && player->collidesWithItem(enemy)) {
 
-                // 【机制平衡】如果卡比正在翻滚或吞噬，视为无敌/免伤，不扣血
+                // 【机制平衡】如果卡比正在翻滚、冰防御或雷冲刺，视为无敌/免伤，不扣血
                 if (player->isRolling) continue;
-                if (player->isSwallowing) continue;
                 if (player->isIceDefending) continue;
+                if (player->isLightningDashing) continue;
                 // ====== 技能互动：火形态疾跑或爆炸触碰敌人 ======
                 if (player->isFireSprinting || player->isExploding) {
                     if (player->isFireSprinting) {
@@ -1684,7 +2487,11 @@ void MainWindow::gameUpdate() {
                 }
 
                 player->hp--;
-                player->invulnTimer = 60;
+                // 扣血音效
+                sfxPlayer->setSource(QUrl("qrc:///tu/music/sitar_negative_quick.wav"));
+                sfxAudio->setVolume(0.5);
+                sfxPlayer->play();
+                player->invulnTimer = 90;
                 player->vy = -6;
                 break; // 单帧内只承受一次伤害
             }
@@ -1692,8 +2499,23 @@ void MainWindow::gameUpdate() {
         } // if (player->hp > 0) 被刺伤后跳过敌人检测
     }
 
-    // ====== 统一死亡检查（刺或敌人都可能导致死亡）======
+    // ====== 掉入虚空直接死亡 ======
+    if (player->y() > scene->sceneRect().height() + 100) {
+        player->hp = 0;
+    }
+
+    // ====== 统一死亡检查（刺、敌人或虚空都可能导致死亡）======
     if (player->hp <= 0) {
+        // 停止脚步和水声
+        if (stepPlayer->playbackState() == QMediaPlayer::PlayingState) stepPlayer->stop();
+        if (waterPlayer->playbackState() == QMediaPlayer::PlayingState) waterPlayer->stop();
+        // 死亡音效（暂停BGM）
+        bgmPlayer->pause();
+        bgmPaused = true;
+        cinematicPlayer->setSource(QUrl("qrc:///tu/music/grand_piano_negative_long.wav"));
+        cinematicAudio->setVolume(0.5);
+        cinematicPlayer->play();
+
         timer->stop();
 
         QGraphicsTextItem* gameOverText = new QGraphicsTextItem("GAME OVER");
@@ -1726,29 +2548,14 @@ void MainWindow::gameUpdate() {
     for (Goal* g : goals) {
         if (!g->isReached && player->collidesWithItem(g)) {
             g->isReached = true;
-            timer->stop();
-
-            QGraphicsTextItem* winText = new QGraphicsTextItem("MISSION ACCOMPLISHED!");
-            winText->setFont(QFont("SimHei", 36, QFont::Bold));
-            winText->setDefaultTextColor(QColor(255, 215, 0));
-            winText->setZValue(2000);
-            qreal tw = winText->boundingRect().width();
-            winText->setPos(player->x() - tw / 2.0, 400);
-            scene->addItem(winText);
-
-            QTimer::singleShot(2500, this, [this, winText]() {
-                scene->removeItem(winText);
-                delete winText;
-                cleanupGameObjects();
-                showMainMenu();
-            });
+            startEndingAnimation();
             return;
         }
     }
 
     // ====== 新增：生命值图标动态固定在屏幕左上角 (HUD) ======
     qreal screenLeft = cameraX - halfViewW;
-    qreal screenTop = cameraY - view->viewport()->height()/1.2;
+    qreal screenTop = cameraY - view->viewport()->height() / 2.0;
 
     for (int i = 0; i < lifeIcons.size(); ++i) {
         if (i < player->hp) {
@@ -1773,21 +2580,29 @@ void MainWindow::gameUpdate() {
             swallowWindRect = QRectF(player->x() - 60, player->y(), 60 + 48, 48);
         }
 
+        // 2.5 吞噬判定矩形（比身体更大，怪物进入此区域即被吞入，不需要贴脸）
+        QRectF swallowEatRect;
+        if (player->facingRight) {
+            swallowEatRect = QRectF(player->x(), player->y(), 48 + 48, 48);
+        } else {
+            swallowEatRect = QRectF(player->x() - 48, player->y(), 48 + 48, 48);
+        }
+
         // 3. 逆序检查场景中的怪物（拉扯与进肚）
         for (int j = enemies.size() - 1; j >= 0; j--) {
             Enemy* enemy = enemies[j];
             if (!enemy->isDead && enemy->canBeSwallowed()) {
                 QRectF enemyRect = enemy->sceneBoundingRect();
 
-                // 【怪物阶段一】：触碰身体 -> 真正吸进肚子里
-                if (playerRect.intersects(enemyRect)) {
-                    player->swallowedAbility = enemy->ability; // 记住能力
+                // 【怪物阶段一】：进入吞噬判定矩形 -> 真正吸进肚子里
+                if (swallowEatRect.intersects(enemyRect)) {
+                    player->swallowedAbility = enemy->ability;
                     enemy->isDead = true;
                     scene->removeItem(enemy);
                     enemies.removeAt(j);
                     delete enemy;
 
-                    player->isFatty = true; // 吞到怪物，进入变胖状态
+                    player->isFatty = true;
                     player->endSwallow();
                     break;
                 }
@@ -1833,6 +2648,30 @@ void MainWindow::gameUpdate() {
                 }
             }
         }
+
+        // 5. 检查星星（吸入与吞噬）
+        for (int j = stars.size() - 1; j >= 0; j--) {
+            Star* star = stars[j];
+            QRectF starRect = star->sceneBoundingRect();
+
+            // 【星星阶段一】：被吸入到吞食判定范围 -> 吞噬获得单次攻击
+            if (swallowEatRect.intersects(starRect)) {
+                player->starAttackStock++;
+                scene->removeItem(star);
+                stars.removeAt(j);
+                delete star;
+                break;
+            }
+            // 【星星阶段二】：处于吸气范围内 -> 拉扯
+            else if (swallowWindRect.intersects(starRect)) {
+                double pullSpeed = 5.5;
+                if (player->facingRight) {
+                    star->setPos(star->x() - pullSpeed, star->y());
+                } else {
+                    star->setPos(star->x() + pullSpeed, star->y());
+                }
+            }
+        }
     }
     // ====== 新增：监听卡比吐出动画的触发帧，生成对应的星星子弹 ======
     if (player->triggerSpitStar) {
@@ -1840,7 +2679,7 @@ void MainWindow::gameUpdate() {
 
         // 1. 创建高伤害、高速度的星星子弹
         Projectile* spitStar = new Projectile(player->facingRight);
-        spitStar->damage = 3;
+        spitStar->damage = 50;
         spitStar->vx = player->facingRight ? 16 : -16;
 
         // 2. 根据肚子里怪物的能力，绘制不同颜色的星星
@@ -1890,7 +2729,9 @@ void MainWindow::gameUpdate() {
 
         // 3. 地板碰撞检测：防止蛋糕穿模掉出地图
         QRectF cRect = cake->sceneBoundingRect();
+        { QRectF cakeZ = cRect.adjusted(-10,-10,10,10);
         for (Tile *tile : floors) {
+            if (!tile->sceneBoundingRect().intersects(cakeZ)) continue;
             if (cake->collidesWithItem(tile)) {
                 QRectF tRect = tile->sceneBoundingRect();
                 if (cake->vy > 0) { // 只有在向下掉落时踩到地板才触发阻挡
@@ -1901,10 +2742,145 @@ void MainWindow::gameUpdate() {
                 break; // 踩到一块地板后就跳出当前的碰撞检查
             }
         }
+        }
     }
+    // ====== 星星重力与地面碰撞 ======
+    for (int i = stars.size() - 1; i >= 0; i--) {
+        Star* star = stars[i];
+        star->updateLogic();
+
+        // 防止抖动：检测星星是否已停在地面上
+        bool isResting = false;
+        if (star->vy == 0) {
+            QRectF sRectCheck = star->sceneBoundingRect();
+            QPointF footPoint(sRectCheck.center().x(), sRectCheck.bottom() + 2);
+            for (Tile* tile : floors) {
+                if (tile->sceneBoundingRect().contains(footPoint)) {
+                    isResting = true;
+                    break;
+                }
+            }
+        }
+
+        // 1. 应用重力（仅当未停在地面时）
+        if (!isResting) {
+            star->vy += 0.8;
+            if (star->vy > 15) star->vy = 15;
+        }
+
+        // 2. 垂直位移
+        star->setPos(star->x(), star->y() + star->vy);
+
+        // 3. 地板碰撞
+        QRectF sRect = star->sceneBoundingRect();
+        { QRectF starZ = sRect.adjusted(-10,-10,10,10);
+        for (Tile* tile : floors) {
+            if (!tile->sceneBoundingRect().intersects(starZ)) continue;
+            if (star->collidesWithItem(tile)) {
+                QRectF tRect = tile->sceneBoundingRect();
+                if (star->vy > 0) {
+                    star->setPos(star->x(), tRect.top() - sRect.height());
+                    star->vy = 0;
+                }
+                break;
+            }
+        }
+        }
+    }
+	// ====== 星星触碰获得（无需吞噬，碰到就自动收集） ======
+	if (player && player->hp > 0) {
+		QRectF pRect = player->sceneBoundingRect().adjusted(4, 4, -4, -4);
+		for (int k = stars.size() - 1; k >= 0; k--) {
+			if (pRect.intersects(stars[k]->sceneBoundingRect())) {
+				player->starAttackStock++;
+				Star* collected = stars[k];
+				scene->removeItem(collected);
+					stars.removeAt(k);
+				delete collected;
+				break;
+			}
+		}
+	}
+    // ====== 木箱物理（重力 + 地面碰撞） ======
+    for (Crate* crate : crates) {
+        crate->vy += 0.8;
+        if (crate->vy > 15) crate->vy = 15;
+        crate->setPos(crate->x(), crate->y() + crate->vy);
+
+        QRectF crateRect = crate->sceneBoundingRect();
+        { QRectF crateZ = crateRect.adjusted(-10,-10,10,10);
+        for (Tile* tile : floors) {
+            if (!tile->sceneBoundingRect().intersects(crateZ)) continue;
+            if (crate->collidesWithItem(tile)) {
+                QRectF tileRect = tile->sceneBoundingRect();
+                if (crate->vy > 0) {
+                    crate->setPos(crate->x(), tileRect.top() - crateRect.height());
+                    crate->vy = 0;
+                }
+                break;
+            }
+        }
+        }
+    }
+
+    // ====== 玩家推动木箱 ======
+    if (player && player->hp > 0) {
+        cratePushSoundPlayed = false;
+        for (Crate* crate : crates) {
+            QRectF pRect = player->sceneBoundingRect();
+            QRectF cRect = crate->sceneBoundingRect();
+            if (pRect.intersects(cRect)) {
+                // 计算水平穿透方向，将玩家推出木箱
+                // 根据玩家中心与木箱中心的相对位置判断方向
+                bool playerOnRight = (player->x() > crate->x());
+                double pushDir = playerOnRight ? -1 : 1;
+                double pushSpeed = qMin(qAbs(cRect.right() - pRect.left()) + 1.0, 10.0); // 刚好推出
+
+                // 先尝试推出玩家（防止卡进木箱内部）
+                double sepX = playerOnRight ? cRect.right() - pRect.left() + 0.5
+                                            : cRect.left() - pRect.right() - 0.5;
+                player->setPos(player->x() + sepX, player->y());
+
+                // 尝试推动木箱（只有玩家在地面时才能推）
+                if (player->isOnGround) {
+                    double crateMove = (pushDir > 0) ? qMax(pushSpeed, 3.0) : qMin(-pushSpeed, -3.0);
+                    crate->setPos(crate->x() + crateMove, crate->y());
+                    // 检查木箱是否撞墙
+                    bool blocked = false;
+                    { QRectF crateZ2 = crate->sceneBoundingRect().adjusted(-10,-10,10,10);
+                    for (Tile* tile : floors) {
+                        if (!tile->sceneBoundingRect().intersects(crateZ2)) continue;
+                        if (crate->collidesWithItem(tile)) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    }
+                    if (blocked) {
+                        // 木箱推不动，玩家也不移动
+                        crate->setPos(crate->x() - crateMove, crate->y());
+                        player->vx = 0;
+                    } else {
+                        if (!cratePushSoundPlayed) {
+                            sfxPlayer->setSource(QUrl("qrc:///tu/music/stone_push_medium.wav"));
+                            sfxAudio->setVolume(0.5);
+                            sfxPlayer->play();
+                            cratePushSoundPlayed = true;
+                        }
+                    }
+                }
+                player->vx = 0; // 防止持续穿透
+                break; // 每帧只处理一个木箱
+            }
+        }
+    }
+
     // ====== 闪电形态：生成与更新尾气系统 ======
     // 保险机制：如果受到攻击丢失了形态或按T取消了形态，强制坠机
-    if (player->currentForm != Enemy::SPARK) player->isLightningFlying = false;
+    if (player->currentForm != Enemy::SPARK) {
+        player->isLightningFlying = false;
+        player->endLightningDash();
+    }
 
     if (player->isLightningFlying) {
         // 只有在发生移动时，才喷射尾气
@@ -1934,7 +2910,7 @@ void MainWindow::gameUpdate() {
     // 渐变消散尾气
     for (int i = exhaustItems.size() - 1; i >= 0; i--) {
         exhaustLifetimes[i]--;
-        exhaustItems[i]->setOpacity(exhaustLifetimes[i] / 15.0); // 随着时间渐渐变透明
+        exhaustItems[i]->setOpacity(exhaustLifetimes[i] / 15.0);
         if (exhaustLifetimes[i] <= 0) {
             scene->removeItem(exhaustItems[i]);
             delete exhaustItems[i];
@@ -1948,6 +2924,13 @@ void MainWindow::mousePressEvent(QMouseEvent *event) { Q_UNUSED(event); }
 void MainWindow::mouseMoveEvent(QMouseEvent *event) { Q_UNUSED(event); }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
+    // UI点击音效
+    auto playPop = [this]() {
+        sfxPlayer->setSource(QUrl("qrc:///tu/music/pop_1.wav"));
+        sfxAudio->setVolume(0.5);
+        sfxPlayer->play();
+    };
+
     if (obj == view) {
         if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
             QMouseEvent* me = static_cast<QMouseEvent*>(event);
@@ -1971,6 +2954,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                     static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
                     for (int i = 0; i < mainMenuBtnRects.size(); i++) {
                         if (mainMenuBtnRects[i].contains(scenePos)) {
+                            playPop();
                             bool hasContinue = (savedLevelNum > 0);
                             if (i == 0) {
                                 pendingAction = ACT_SHOW_LEVEL_SELECT;
@@ -1997,10 +2981,17 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                     bool inside = settingsBtnRects[0].contains(scenePos);
                     settingsButtons[0]->setBrush(inside ? QBrush(QColor(50, 80, 150, 230)) : QBrush(QColor(30, 50, 90, 210)));
                 }
+                // 音量滑块悬停效果
+                if (settingsVolHandle && !settingsVolRect.isNull()) {
+                    bool overVol = settingsVolRect.contains(scenePos);
+                    settingsVolHandle->setBrush(overVol ? QBrush(QColor(255, 255, 255)) : QBrush(QColor(220, 220, 220)));
+                    settingsVolHandle->setPen(QPen(overVol ? QColor(255, 255, 150) : Qt::white, overVol ? 2 : 1));
+                }
                 // 返回按钮点击
                 if (event->type() == QEvent::MouseButtonPress &&
                     static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
                     if (!settingsBtnRects.isEmpty() && settingsBtnRects[0].contains(scenePos)) {
+                        playPop();
                         pendingAction = ACT_SHOW_MAIN_MENU;
                         return true;
                     }
@@ -2035,27 +3026,58 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                     settingsVolRect.x() + settingsVolRect.width() * volumeLevel - 7, settingsVolRect.y() - 4);
             }
 
-            // === 选关界面悬停/点击 ===
+            // === 模式选择界面悬停/点击 ===
             if (currentState == LevelSelect) {
-                for (int i = 0; i < cardRects.size() && i < levelCards.size(); i++) {
-                    bool inside = cardRects[i].contains(scenePos);
-                    bool isContinueCard = (i < cardLevelNums.size() && cardLevelNums[i] == -1);
-                    QColor normal = isContinueCard ? QColor(30, 70, 30, 210) : QColor(30, 30, 70, 210);
-                    QColor hover = isContinueCard ? QColor(50, 140, 50, 230) : QColor(60, 60, 140, 230);
-                    QPen normalPen = isContinueCard ? QPen(QColor(100, 200, 100), 2) : QPen(QColor(80, 80, 180), 2);
-                    if (levelCards[i]) {
-                        levelCards[i]->setBrush(inside ? QBrush(hover) : QBrush(normal));
-                        levelCards[i]->setPen(inside ? QPen(QColor(200, 200, 100), 3) : normalPen);
-                    }
-                    if (inside && event->type() == QEvent::MouseButtonPress &&
-                        static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
-                        if (isContinueCard) {
-                            pendingAction = ACT_CONTINUE_GAME;
+                if (isBossSelect) {
+                    // ---- Boss选择子菜单 ----
+                    for (int i = 0; i < bossCardRects.size() && i < bossCards.size(); i++) {
+                        bool inside = bossCardRects[i].contains(scenePos);
+                        QColor normal(50, 50, 80, 200);
+                        QColor hover(80, 80, 160, 230);
+                        if (bossCards[i]) {
+                            bossCards[i]->setBrush(inside ? QBrush(hover) : QBrush(normal));
+                            bossCards[i]->setPen(QPen(inside ? QColor(255, 255, 150) : QColor(150, 150, 200), inside ? 3 : 2));
+                        }
+                        if (inside && event->type() == QEvent::MouseButtonPress &&
+                            static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                            playPop();
+                            modeSelection = bossSelectTypes[i];
                             return true;
                         }
-                        int lvNum = (i < cardLevelNums.size()) ? cardLevelNums[i] : 1;
-                        keys.insert(Qt::Key_1 + lvNum - 1);
-                        return true;
+                    }
+                    // 返回按钮（带悬停变色）
+                    if (bossBackLabel && bossBackLabel->isVisible()) {
+                        QRectF backRect = bossBackLabel->sceneBoundingRect().adjusted(-10, -5, 10, 5);
+                        bool inside = backRect.contains(scenePos);
+                        bossBackLabel->setDefaultTextColor(inside ? QColor(255, 255, 255) : QColor(180, 180, 255));
+                        if (inside && event->type() == QEvent::MouseButtonPress &&
+                            static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                            playPop();
+                            showLevelSelect();
+                            return true;
+                        }
+                    }
+                } else {
+                    for (int i = 0; i < cardRects.size() && i < levelCards.size(); i++) {
+                        bool inside = cardRects[i].contains(scenePos);
+                        QColor normal = (i == 0) ? QColor(30, 70, 30, 210) : QColor(70, 30, 30, 210);
+                        QColor hover  = (i == 0) ? QColor(50, 140, 50, 230) : QColor(140, 50, 50, 230);
+                        QPen normalPen((i == 0) ? QColor(100, 200, 100) : QColor(200, 80, 80), 2);
+                        if (levelCards[i]) {
+                            levelCards[i]->setBrush(inside ? QBrush(hover) : QBrush(normal));
+                            levelCards[i]->setPen(QPen(inside ? QColor(255, 255, 150) : normalPen.color(), inside ? 3 : 2));
+                        }
+                        if (inside && event->type() == QEvent::MouseButtonPress &&
+                            static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+                            playPop();
+                            if (cardLevelNums.value(i) == 2) {
+                                // Boss战按钮 → 显示Boss选择子菜单
+                                showBossSelect();
+                            } else {
+                                modeSelection = cardLevelNums.isEmpty() ? 1 : cardLevelNums[i];
+                            }
+                            return true;
+                        }
                     }
                 }
             }
@@ -2068,10 +3090,17 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                     QColor c2 = (i == 0) ? QColor(50, 140, 50, 230) : QColor(140, 50, 50, 230);
                     pauseButtons[i]->setBrush(inside ? QBrush(c2) : QBrush(c1));
                 }
+                // 音量滑块悬停效果
+                if (volHandle) {
+                    bool overVol = volTrackRect.contains(scenePos);
+                    volHandle->setBrush(overVol ? QBrush(QColor(255, 255, 255)) : QBrush(QColor(220, 220, 220)));
+                    volHandle->setPen(QPen(overVol ? QColor(255, 255, 150) : Qt::white, overVol ? 2 : 1));
+                }
                 if (event->type() == QEvent::MouseButtonPress &&
                     static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
                     for (int i = 0; i < pauseBtnRects.size(); i++) {
                         if (pauseBtnRects[i].contains(scenePos)) {
+                            playPop();
                             if (i == 0) {
                                 pendingAction = ACT_RESUME_GAME;
                                 return true;
@@ -2121,6 +3150,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                     static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
                     for (int i = 0; i < gameOverBtnRects.size(); i++) {
                         if (gameOverBtnRects[i].contains(scenePos)) {
+                            playPop();
                             if (i == 0) {
                                 pendingAction = ACT_RESTART_CHECKPOINT;
                                 return true;
@@ -2130,6 +3160,21 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
                             }
                         }
                     }
+                }
+            }
+
+            // === 结束动画按钮悬停/点击 ===
+            if (currentState == ENDING && endingStage >= 2 && endingMenuBtn) {
+                bool inside = endingMenuBtn->sceneBoundingRect().contains(scenePos);
+                QColor normal(30, 50, 90, 210), hover(50, 80, 150, 230);
+                endingMenuBtn->setBrush(inside ? QBrush(hover) : QBrush(normal));
+                if (event->type() == QEvent::MouseButtonPress &&
+                    static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton && inside) {
+                    playPop();
+                    cleanupEndingUI();
+                    cleanupGameObjects();
+                    showMainMenu();
+                    return true;
                 }
             }
         }
@@ -2145,6 +3190,13 @@ void MainWindow::cleanupSelectUI() {
     for (auto* h : categoryHeaders) { scene->removeItem(h); delete h; }
     levelCards.clear(); cardLabels.clear(); cardRects.clear(); cardLevelNums.clear(); categoryHeaders.clear();
     if (menuText) { scene->removeItem(menuText); delete menuText; menuText = nullptr; }
+    // 清理 Boss 选择子菜单
+    for (auto* c : bossCards) { scene->removeItem(c); delete c; }
+    for (auto* l : bossCardLabels) { scene->removeItem(l); delete l; }
+    for (auto* img : bossCardImages) { scene->removeItem(img); delete img; }
+    bossCards.clear(); bossCardLabels.clear(); bossCardImages.clear(); bossCardRects.clear(); bossSelectTypes.clear();
+    if (bossBackLabel) { scene->removeItem(bossBackLabel); delete bossBackLabel; bossBackLabel = nullptr; }
+    isBossSelect = false;
 }
 
 void MainWindow::cleanupPauseUI() {
@@ -2159,7 +3211,143 @@ void MainWindow::cleanupPauseUI() {
     isDraggingVolume = false;
 }
 
+void MainWindow::cleanupEndingUI() {
+    if (endingOverlay) { scene->removeItem(endingOverlay); delete endingOverlay; endingOverlay = nullptr; }
+    if (endingBlackBg) { scene->removeItem(endingBlackBg); delete endingBlackBg; endingBlackBg = nullptr; }
+    if (endingBg) { scene->removeItem(endingBg); delete endingBg; endingBg = nullptr; }
+    if (endingRock) { scene->removeItem(endingRock); delete endingRock; endingRock = nullptr; }
+    if (endingKirby) { scene->removeItem(endingKirby); delete endingKirby; endingKirby = nullptr; }
+    if (endingBigBird) { scene->removeItem(endingBigBird); delete endingBigBird; endingBigBird = nullptr; }
+    if (endingSmallBird) { scene->removeItem(endingSmallBird); delete endingSmallBird; endingSmallBird = nullptr; }
+    if (endingScreen) { scene->removeItem(endingScreen); delete endingScreen; endingScreen = nullptr; }
+    if (endingMenuBtn) { scene->removeItem(endingMenuBtn); delete endingMenuBtn; endingMenuBtn = nullptr; }
+    if (endingMenuBtnText) { scene->removeItem(endingMenuBtnText); delete endingMenuBtnText; endingMenuBtnText = nullptr; }
+    endingKirbyFrames.clear();
+    endingBigBirdFrames.clear();
+    endingSmallBirdFrames.clear();
+    endingAnimTimer = 0;
+    endingStage = 0;
+}
+
+void MainWindow::startEndingAnimation() {
+    currentState = ENDING;
+    keys.clear();
+
+    // 停止脚步和水声
+    if (stepPlayer->playbackState() == QMediaPlayer::PlayingState) stepPlayer->stop();
+    if (waterPlayer->playbackState() == QMediaPlayer::PlayingState) waterPlayer->stop();
+    // 过关音效（暂停BGM）
+    bgmPlayer->pause();
+    bgmPaused = true;
+    cinematicPlayer->setSource(QUrl("qrc:///tu/music/harpsichord_level_complete.wav"));
+    cinematicAudio->setVolume(0.5);
+    cinematicPlayer->play();
+
+    // 隐藏 HUD
+    staminaBar->setVisible(false);
+    for (auto icon : lifeIcons) icon->setVisible(false);
+    if (cooldownText) cooldownText->setVisible(false);
+    if (fireCdIcon) fireCdIcon->setVisible(false);
+    if (iceCdIcon)  iceCdIcon->setVisible(false);
+    if (leafCdIcon) leafCdIcon->setVisible(false);
+    if (bossHpBarBg) bossHpBarBg->setVisible(false);
+    if (bossHpBarFg) bossHpBarFg->setVisible(false);
+
+    // 锁定相机中心点
+    endingBaseX = player->x();
+    endingBaseY = 850;
+    view->centerOn(endingBaseX, endingBaseY);
+
+    // 用固定相机中心直接计算视口四角，确保始终居中不跟随角色
+    qreal vw = view->viewport()->width();
+    qreal vh = view->viewport()->height();
+    qreal cx = endingBaseX - vw / 2.0;
+    qreal cy = endingBaseY - vh / 2.0;
+
+    auto load3Frames = [](const QString &path) -> QVector<QPixmap> {
+        QVector<QPixmap> frames;
+        QPixmap sheet(path);
+        if (!sheet.isNull()) {
+            int fh = sheet.height();
+            int count = sheet.width() / fh;
+            for (int i = 0; i < count && i < 3; i++)
+                frames.push_back(sheet.copy(i * fh, 0, fh, fh));
+        }
+        return frames;
+    };
+
+    endingKirbyFrames = load3Frames(":/tu/jieshudonghua/kirby_huishou.png");
+    endingBigBirdFrames = load3Frames(":/tu/jieshudonghua/bigbird.png");
+    endingSmallBirdFrames = load3Frames(":/tu/jieshudonghua/smallbird.png");
+
+    // 0. 黑底（使用成员变量，确保后续可清理）
+    endingBlackBg = new QGraphicsRectItem(cx, cy, vw, vh);
+    endingBlackBg->setBrush(Qt::black);
+    endingBlackBg->setPen(Qt::NoPen);
+    endingBlackBg->setZValue(2999);
+    scene->addItem(endingBlackBg);
+
+    // 1. 夕阳背景
+    QPixmap sunsetPix(":/tu/jieshudonghua/sunset.png");
+    if (!sunsetPix.isNull()) {
+        endingBg = new QGraphicsPixmapItem(sunsetPix.scaled(vw, vh, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        endingBg->setPos(cx, cy);
+        endingBg->setZValue(3000);
+        scene->addItem(endingBg);
+    }
+
+    // 2. 石头（左下角）
+    QPixmap rockPix(":/tu/jieshudonghua/rock.png");
+    qreal rh = 0;
+    if (!rockPix.isNull()) {
+        qreal rw = 380;
+        rh = rw * rockPix.height() / rockPix.width();
+        endingRock = new QGraphicsPixmapItem(rockPix.scaled(rw, rh, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        endingRock->setPos(cx - 20, cy + vh - rh + 30);
+        endingRock->setZValue(3001);
+        scene->addItem(endingRock);
+    }
+
+    // 3. 卡比
+    if (!endingKirbyFrames.isEmpty()) {
+        qreal kw = 130;
+        qreal kh = 130;
+        endingKirby = new QGraphicsPixmapItem(endingKirbyFrames[0].scaled(kw, kh, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        endingKirby->setZValue(3002);
+        endingKirby->setPos(cx + vw * 0.08, cy + vh - rh - 10);
+        scene->addItem(endingKirby);
+    }
+
+    // 4. 鸟儿（初始在屏幕右侧外，准备飞入）
+    if (!endingBigBirdFrames.isEmpty()) {
+        endingBigBird = new QGraphicsPixmapItem(endingBigBirdFrames[0].scaled(70, 70, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        endingBigBird->setZValue(3003);
+        endingBigBird->setPos(cx + vw + 50, cy + vh * 0.42 - 35);
+        scene->addItem(endingBigBird);
+    }
+
+    if (!endingSmallBirdFrames.isEmpty()) {
+        endingSmallBird = new QGraphicsPixmapItem(endingSmallBirdFrames[0].scaled(45, 45, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        endingSmallBird->setZValue(3004);
+        endingSmallBird->setPos(cx + vw + 100, cy + vh * 0.42 + 5);
+        scene->addItem(endingSmallBird);
+    }
+
+    endingAnimTimer = 0;
+    endingStage = 0;
+}
 void MainWindow::cleanupGameObjects() {
+    cleanupEndingUI();
+    // 先恢复猪鲨的水转换，防止Tile指针悬空
+    if (dukeFishron) {
+        for (auto& rec : dukeFishron->activeWaterChanges) {
+            rec.tile->changeType(rec.originalType, rec.originalPixmap);
+            waters.removeOne(rec.tile);
+            floors.append(rec.tile);
+        }
+        dukeFishron->activeWaterChanges.clear();
+        dukeFishron->pendingWaterConversions.clear();
+    }
     for (Enemy* t : enemies) { scene->removeItem(t); delete t; }
     enemies.clear();
     for (Tile* t : waters) { scene->removeItem(t); delete t; }
@@ -2169,22 +3357,104 @@ void MainWindow::cleanupGameObjects() {
     spikes.clear();
     for (Cake* c : cakes) { scene->removeItem(c); delete c; }
     cakes.clear();
+    for (Star* s : stars) { scene->removeItem(s); delete s; }
+    stars.clear();
     for (Checkpoint* cp : checkpoints) { scene->removeItem(cp); delete cp; }
     checkpoints.clear();
     for (Goal* g : goals) { scene->removeItem(g); delete g; }
     goals.clear();
+    for (Crate* crate : crates) { scene->removeItem(crate); delete crate; }
+    crates.clear();
     for (auto* ex : exhaustItems) { scene->removeItem(ex); delete ex; }
     exhaustItems.clear(); exhaustLifetimes.clear();
+    // 清理残留弹幕（防止重新进入游戏时访问悬空指针）
+    for (auto* p : projectiles) { scene->removeItem(p); delete p; }
+    projectiles.clear();
     // Boss已在enemies循环中delete，置空防止悬空指针
+    cleanupTutorialTexts();
     dukeFishron = nullptr;
     brainOfCthulhu = nullptr;
     iceGod = nullptr;
+    // 重置猪鲨二阶段背景
+    for (QGraphicsRectItem* bg : phase2BgLayers) {
+        bg->setOpacity(0.0);
+    }
+    for (QGraphicsRectItem* bg : backgroundLayers) {
+        bg->setOpacity(1.0);
+    }
+    dukePhase2BgStarted = false;
+    phase2BgFadeTimer = 0;
+    // 清理登场动画残留
+    if (bossIntroOverlay) { scene->removeItem(bossIntroOverlay); delete bossIntroOverlay; bossIntroOverlay = nullptr; }
+    if (bossIntroExclamation) { scene->removeItem(bossIntroExclamation); delete bossIntroExclamation; bossIntroExclamation = nullptr; }
+    bossIntroActive = false;
+    bossIntroTimer = 0;
+    bossSpawned = false;       // 重置，允许再次触发Boss战
+    pendingBossType = 0;       // 清理Boss类型标记
     if (player) { scene->removeItem(player); delete player; player = nullptr; }
     staminaBar->setVisible(false);
     for (auto icon : lifeIcons) icon->setVisible(false);
     if (cooldownText) cooldownText->setVisible(false);
+    if (fireCdIcon) fireCdIcon->setVisible(false);
+    if (iceCdIcon)  iceCdIcon->setVisible(false);
+    if (leafCdIcon) leafCdIcon->setVisible(false);
     if (bossHpBarBg) bossHpBarBg->setVisible(false);
     if (bossHpBarFg) bossHpBarFg->setVisible(false);
+    // 停止脚步和水声
+    if (stepPlayer->playbackState() == QMediaPlayer::PlayingState) stepPlayer->stop();
+    if (waterPlayer->playbackState() == QMediaPlayer::PlayingState) waterPlayer->stop();
+    // 恢复原始BGM源（退出Boss战后用），showMainMenu 会负责播放
+    bgmPlayer->setSource(QUrl(originalBgmSource));
+    bgmPlayer->setLoops(QMediaPlayer::Infinite);
+    bgmPaused = true;  // 让 showMainMenu 恢复播放
+}
+
+// ====== 浮动文字教程系统实现 ======
+void MainWindow::triggerTutorialText(TutorialTrigger* t) {
+    if (!t || t->shown) return;
+    t->shown = true;
+    t->remainingFrames = t->durationFrames;
+
+    // 移除旧文字
+    for (auto& tt : tutorialTriggers) {
+        if (tt.item) { scene->removeItem(tt.item); delete tt.item; tt.item = nullptr; }
+    }
+
+    t->item = new QGraphicsTextItem(t->message);
+    QFont f = t->item->font();
+    f.setFamily("SimHei");
+    f.setPixelSize(16);
+    f.setBold(true);
+    t->item->setFont(f);
+    t->item->setDefaultTextColor(QColor(255, 255, 200));
+    t->item->setZValue(2500);
+
+    qreal tx = qMax(player->x() - 180.0, 0.0);
+    qreal ty = player->y() - 90.0;
+    t->item->setPos(tx, ty);
+    scene->addItem(t->item);
+}
+
+void MainWindow::updateTutorialTexts() {
+    for (auto& t : tutorialTriggers) {
+        if (!t.item) continue;
+        t.remainingFrames--;
+        if (t.remainingFrames <= 30) {
+            t.item->setOpacity(qMax(t.remainingFrames / 30.0, 0.0));
+        }
+        if (t.remainingFrames <= 0) {
+            scene->removeItem(t.item);
+            delete t.item;
+            t.item = nullptr;
+        }
+    }
+}
+
+void MainWindow::cleanupTutorialTexts() {
+    for (auto& t : tutorialTriggers) {
+        if (t.item) { scene->removeItem(t.item); delete t.item; t.item = nullptr; }
+    }
+    tutorialTriggers.clear();
 }
 
 void MainWindow::cleanupGameOverUI() {
@@ -2202,12 +3472,10 @@ void MainWindow::showGameOver() {
 
     qreal camX = player->x();
     qreal camY = 850;
-    qreal vw = view->viewport()->width();
-    qreal vh = view->viewport()->height();
-    qreal cx = camX - vw / 2.0;
-    qreal cy = camY - vh / 2.0;
+    qreal cx = camX - SCREEN_W / 2.0;
+    qreal cy = camY - SCREEN_H / 2.0;
 
-    gameOverOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    gameOverOverlay = new QGraphicsRectItem(cx, cy, SCREEN_W, SCREEN_H);
     gameOverOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
     gameOverOverlay->setPen(Qt::NoPen);
     gameOverOverlay->setZValue(1999);
@@ -2218,12 +3486,12 @@ void MainWindow::showGameOver() {
     gameOverTitle->setDefaultTextColor(QColor(255, 80, 80));
     gameOverTitle->setZValue(2000);
     double tw = gameOverTitle->boundingRect().width();
-    gameOverTitle->setPos(cx + (vw - tw) / 2.0, cy + 80);
+    gameOverTitle->setPos(cx + (SCREEN_W - tw) / 2.0, cy + 80);
     scene->addItem(gameOverTitle);
 
     qreal btnW = 260, btnH = 50, btnSpacing = 20;
-    qreal btnX = cx + (vw - btnW) / 2.0;
-    qreal btnY = cy + vh / 2.0 + 20;
+    qreal btnX = cx + (SCREEN_W - btnW) / 2.0;
+    qreal btnY = cy + SCREEN_H / 2.0 + 20;
 
     struct { QString text; QColor bg; QColor border; } btns[] = {
         {"重新开始", QColor(30, 80, 30, 210), QColor(100, 200, 100)},
@@ -2259,34 +3527,10 @@ void MainWindow::showGameOver() {
     timer->start(16);
 }
 
-void MainWindow::showStartScreen() {
-    if (!titleText) {
-        titleText = new QGraphicsTextItem("星之卡比");
-        titleText->setFont(QFont("SimHei", 48, QFont::Bold));
-        titleText->setDefaultTextColor(Qt::white);
-        titleText->setZValue(2000);
-        titleText->setPos(380, 650);
-        scene->addItem(titleText);
-    } else { titleText->setVisible(true); }
-    if (!hintText) {
-        hintText = new QGraphicsTextItem("- 按ENTER开始游戏 -");
-        hintText->setFont(QFont("SimHei", 20, QFont::Bold));
-        hintText->setDefaultTextColor(Qt::yellow);
-        hintText->setZValue(2000);
-        hintText->setPos(380, 780);
-        scene->addItem(hintText);
-    } else { hintText->setVisible(true); }
-    if (!player) {
-        player = new Player();
-        player->setPos(800, 856);
-        scene->addItem(player);
-    }
-    currentState = START_SCREEN;
-    timer->start(16);
-    enterPressed = false;
-}
-
 void MainWindow::cleanupMainMenuUI() {
+    cleanupEndingUI();
+    if (mainMenuBg0) { scene->removeItem(mainMenuBg0); delete mainMenuBg0; mainMenuBg0 = nullptr; }
+    if (mainMenuBg1) { scene->removeItem(mainMenuBg1); delete mainMenuBg1; mainMenuBg1 = nullptr; }
     if (mainMenuOverlay) { scene->removeItem(mainMenuOverlay); delete mainMenuOverlay; mainMenuOverlay = nullptr; }
     if (mainMenuTitle) { scene->removeItem(mainMenuTitle); delete mainMenuTitle; mainMenuTitle = nullptr; }
     for (auto* b : mainMenuButtons) { scene->removeItem(b); delete b; }
@@ -2308,25 +3552,44 @@ void MainWindow::cleanupSettingsUI() {
 }
 
 void MainWindow::showMainMenu() {
+    // 如果BGM被剧情音效暂停了，恢复BGM并停止剧情音效
+    if (bgmPaused) {
+        cinematicPlayer->stop();
+        bgmPlayer->setSource(QUrl(originalBgmSource));
+        bgmPlayer->setLoops(QMediaPlayer::Infinite);
+        bgmPlayer->play();
+        bgmPaused = false;
+    }
     cleanupMainMenuUI();
-    view->centerOn(500, 900);
-    qreal vw = view->viewport()->width();
-    qreal vh = view->viewport()->height();
-    qreal cx = 500 - vw / 2.0;
-    qreal cy = 900 - vh / 2.0;
+    keys.clear(); // 清除残留按键，防止旧按键自动触发功能
+    // 居中相机后获取实际可见区域
+    view->centerOn(SCREEN_W / 2.0, SCREEN_H / 2.0);
+    QPointF tl = view->mapToScene(0, 0);
+    qreal cx = tl.x();
+    qreal cy = tl.y();
 
-    mainMenuOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
-    mainMenuOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
-    mainMenuOverlay->setPen(Qt::NoPen);
-    mainMenuOverlay->setZValue(1999);
-    scene->addItem(mainMenuOverlay);
+    // 设置场景背景色，防止透明区域显示黑色
+    scene->setBackgroundBrush(QColor(135, 206, 235)); // 天空蓝
 
-    mainMenuTitle = new QGraphicsTextItem("星之卡比");
-    mainMenuTitle->setFont(QFont("SimHei", 42, QFont::Bold));
-    mainMenuTitle->setDefaultTextColor(QColor(255, 255, 100));
-    mainMenuTitle->setZValue(2000);
-    mainMenuTitle->setPos(cx + (vw - mainMenuTitle->boundingRect().width()) / 2.0, cy + 40);
-    scene->addItem(mainMenuTitle);
+    // 背景：kaishidonghua image.png 的两帧（各1000x700）重叠放置
+    // frame1 叠在 frame0 上方（frame1 的透明区域可透出 frame0）
+    QPixmap kaishiSheet(":/tu/kaishidonghua/image.png");
+    if (!kaishiSheet.isNull() && kaishiSheet.width() >= 2000) {
+        QPixmap frame0 = kaishiSheet.copy(0, 0, 1000, 700)
+                              .scaled(SCREEN_W, SCREEN_H, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        QPixmap frame1 = kaishiSheet.copy(1000, 0, 1000, 700)
+                              .scaled(SCREEN_W, SCREEN_H, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+
+        mainMenuBg0 = new QGraphicsPixmapItem(frame0);
+        mainMenuBg0->setPos(cx, cy);
+        mainMenuBg0->setZValue(1998);
+        scene->addItem(mainMenuBg0);
+
+        mainMenuBg1 = new QGraphicsPixmapItem(frame1);
+        mainMenuBg1->setPos(cx, cy);
+        mainMenuBg1->setZValue(1999);
+        scene->addItem(mainMenuBg1);
+    }
 
     // 按钮列表
     struct BtnInfo { QString text; QColor bgColor; QColor borderColor; };
@@ -2339,8 +3602,9 @@ void MainWindow::showMainMenu() {
     mainMenuBtnCount = btns.size();
 
     qreal btnW = 240, btnH = 50, btnSpacing = 18;
-    qreal btnX = cx + (vw - btnW) / 2.0;
-    qreal btnY = cy + 130;
+    qreal btnX = cx + (SCREEN_W - btnW) / 2.0;
+    // 按钮在卡比图标正下方（屏幕高度约58%位置）
+    qreal btnY = cy + SCREEN_H * 0.58;
     mainMenuButtons.clear(); mainMenuBtnTexts.clear(); mainMenuBtnRects.clear();
 
     for (int i = 0; i < btns.size(); i++) {
@@ -2364,7 +3628,6 @@ void MainWindow::showMainMenu() {
         mainMenuBtnTexts.append(txt);
     }
 
-    view->centerOn(500, 900);
     for (QGraphicsRectItem* bg : backgroundLayers) {
         bg->setPos(500 - bg->rect().width() / 2.0, 0);
     }
@@ -2374,13 +3637,14 @@ void MainWindow::showMainMenu() {
 
 void MainWindow::showSettings() {
     cleanupSettingsUI();
-    view->centerOn(500, 900);
-    qreal vw = view->viewport()->width();
-    qreal vh = view->viewport()->height();
-    qreal cx = 500 - vw / 2.0;
-    qreal cy = 900 - vh / 2.0;
+    keys.clear();
+    // 居中相机后获取实际可见区域
+    view->centerOn(SCREEN_W / 2.0, SCREEN_H / 2.0);
+    QPointF tl = view->mapToScene(0, 0);
+    qreal cx = tl.x();
+    qreal cy = tl.y();
 
-    settingsOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    settingsOverlay = new QGraphicsRectItem(cx, cy, SCREEN_W, SCREEN_H);
     settingsOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
     settingsOverlay->setPen(Qt::NoPen);
     settingsOverlay->setZValue(1999);
@@ -2390,11 +3654,11 @@ void MainWindow::showSettings() {
     settingsTitle->setFont(QFont("SimHei", 36, QFont::Bold));
     settingsTitle->setDefaultTextColor(QColor(255, 255, 100));
     settingsTitle->setZValue(2000);
-    settingsTitle->setPos(cx + (vw - settingsTitle->boundingRect().width()) / 2.0, cy + 40);
+    settingsTitle->setPos(cx + (SCREEN_W - settingsTitle->boundingRect().width()) / 2.0, cy + 40);
     scene->addItem(settingsTitle);
 
     qreal btnW = 260, btnH = 50;
-    qreal btnX = cx + (vw - btnW) / 2.0;
+    qreal btnX = cx + (SCREEN_W - btnW) / 2.0;
     qreal curY = cy + 130;
 
     // 音量标签 + 滑块
@@ -2447,7 +3711,6 @@ void MainWindow::showSettings() {
     scene->addItem(backTxt);
     settingsBtnTexts.append(backTxt);
 
-    view->centerOn(500, 900);
     for (QGraphicsRectItem* bg : backgroundLayers) {
         bg->setPos(500 - bg->rect().width() / 2.0, 0);
     }
@@ -2456,130 +3719,211 @@ void MainWindow::showSettings() {
 
 void MainWindow::showLevelSelect() {
     cleanupSelectUI();
-    view->centerOn(500, 900);
-    qreal vw = view->viewport()->width();
-    qreal vh = view->viewport()->height();
-    qreal cx = 500 - vw / 2.0;
-    qreal cy = 900 - vh / 2.0;
+    keys.clear(); // 清除残留按键，防止旧按键自动触发
+    modeSelection = 0;
+    isBossSelect = false;
+    // 居中相机后获取实际可见区域
+    view->centerOn(SCREEN_W / 2.0, SCREEN_H / 2.0);
+    QPointF tl = view->mapToScene(0, 0);
+    qreal cx = tl.x();
+    qreal cy = tl.y();
 
-    selectOverlay = new QGraphicsRectItem(cx, cy, vw, vh);
+    selectOverlay = new QGraphicsRectItem(cx, cy, SCREEN_W, SCREEN_H);
     selectOverlay->setBrush(QBrush(QColor(0, 0, 0, 180)));
     selectOverlay->setPen(Qt::NoPen);
     selectOverlay->setZValue(1999);
     scene->addItem(selectOverlay);
 
-    selectTitle = new QGraphicsTextItem("选择关卡");
+    selectTitle = new QGraphicsTextItem("选择模式");
     selectTitle->setFont(QFont("SimHei", 36, QFont::Bold));
     selectTitle->setDefaultTextColor(QColor(255, 255, 100));
     selectTitle->setZValue(2000);
-    selectTitle->setPos(cx + (vw - selectTitle->boundingRect().width()) / 2.0, cy + 20);
+    selectTitle->setPos(cx + (SCREEN_W - selectTitle->boundingRect().width()) / 2.0, cy + 40);
     scene->addItem(selectTitle);
 
-    // ====== 三栏分类布局 ======
-    struct LevelInfo { int num; QString name; QString desc; QColor bg; QColor border; };
-    struct Category { QString name; QString icon; QColor headerColor; QList<LevelInfo> levels; };
-
-    QList<Category> cats;
-    cats.append({"战斗关卡", "⚔", QColor(255, 120, 80), {
-        {1, "星之绿地", "Boss: 克苏鲁之脑", QColor(70, 30, 30, 210), QColor(200, 80, 80)},
-        {5, "熔岩堡垒", "Boss: 猪鲨公爵",    QColor(70, 40, 20, 210), QColor(220, 130, 50)},
-    }});
-    cats.append({"跑酷关卡", "🏃", QColor(80, 160, 255), {
-        {2, "刺之回廊", "移动刺 · 纯跳跃",   QColor(30, 40, 80, 210), QColor(80, 120, 220)},
-        {4, "云中回廊", "浮空平台 · 连续翻滚", QColor(30, 50, 90, 210), QColor(100, 150, 240)},
-    }});
-    cats.append({"坑爹关卡", "💀", QColor(80, 220, 100), {
-        {3, "寒冰炼狱", "苹果 · 伏击刺 · 冰砖", QColor(30, 60, 40, 210), QColor(80, 200, 100)},
-        {6, "暗影洞穴", "双重陷阱 · 上下交错", QColor(30, 50, 40, 210), QColor(100, 200, 120)},
-    }});
+    // ====== 两个模式按钮：冒险模式 & Boss战 ======
+    struct ModeInfo { QString name; QString desc; QColor bg; QColor border; QColor hover; };
+    ModeInfo modes[] = {
+        {"冒险模式", "体验星之卡比的经典冒险", QColor(30, 70, 30, 210), QColor(100, 200, 100), QColor(50, 140, 50, 230)},
+        {"Boss战",   "挑战强大的Boss",          QColor(70, 30, 30, 210), QColor(200, 80, 80),   QColor(140, 50, 50, 230)},
+    };
 
     cardRects.clear(); cardLevelNums.clear();
-    qreal colW = vw / 3.0;
-    qreal cardW = 160, cardH = 60;
-    qreal cardSpacing = 10;
-    qreal colStartY = cy + 80;
+    qreal btnW = 280, btnH = 80, btnSpacing = 30;
+    qreal totalH = 2 * btnH + btnSpacing;
+    qreal startY = cy + (SCREEN_H - totalH) / 2.0 + 20;
+    qreal btnX = cx + (SCREEN_W - btnW) / 2.0;
 
-    for (int ci = 0; ci < cats.size(); ci++) {
-        qreal colX = cx + ci * colW;
-        qreal curY = colStartY;
+    for (int i = 0; i < 2; i++) {
+        qreal curY = startY + i * (btnH + btnSpacing);
+        QRectF br(btnX, curY, btnW, btnH);
+        cardRects.append(br);
+        cardLevelNums.append(i + 1); // 1=冒险, 2=Boss
 
-        // 分类标题
-        QGraphicsTextItem* catHeader = new QGraphicsTextItem(cats[ci].icon + " " + cats[ci].name);
-        catHeader->setFont(QFont("SimHei", 16, QFont::Bold));
-        catHeader->setDefaultTextColor(cats[ci].headerColor);
-        catHeader->setZValue(2000);
-        catHeader->setPos(colX + (colW - cardW) / 2.0 + 10, curY);
-        scene->addItem(catHeader);
-        categoryHeaders.append(catHeader);
-        curY += 30;
+        QGraphicsRectItem* card = new QGraphicsRectItem(br);
+        card->setBrush(QBrush(modes[i].bg));
+        card->setPen(QPen(modes[i].border, 2));
+        card->setZValue(2000);
+        scene->addItem(card);
+        levelCards.append(card);
 
-        // 该分类下的关卡卡片
-        for (auto& lv : cats[ci].levels) {
-            qreal cardX = colX + (colW - cardW) / 2.0;
-            QRectF cr(cardX, curY, cardW, cardH);
-            cardRects.append(cr);
-            cardLevelNums.append(lv.num);
+        // 模式名称
+        QGraphicsTextItem* label = new QGraphicsTextItem(modes[i].name);
+        label->setFont(QFont("SimHei", 20, QFont::Bold));
+        label->setDefaultTextColor(Qt::white);
+        label->setZValue(2001);
+        double lw = label->boundingRect().width();
+        label->setPos(btnX + (btnW - lw) / 2.0, curY + 12);
+        scene->addItem(label);
+        cardLabels.append(label);
 
-            QGraphicsRectItem* card = new QGraphicsRectItem(cr);
-            card->setBrush(QBrush(lv.bg));
-            card->setPen(QPen(lv.border, 2));
-            card->setZValue(2000);
-            scene->addItem(card);
-            levelCards.append(card);
-
-            QGraphicsTextItem* label = new QGraphicsTextItem(QString("关卡%1\n%2").arg(lv.num).arg(lv.name));
-            label->setFont(QFont("SimHei", 11, QFont::Bold));
-            label->setDefaultTextColor(Qt::white);
-            label->setZValue(2001);
-            double tw = label->boundingRect().width();
-            double th = label->boundingRect().height();
-            label->setPos(cardX + (cardW - tw) / 2.0, curY + (cardH - th) / 2.0);
-            scene->addItem(label);
-            cardLabels.append(label);
-
-            curY += cardH + cardSpacing;
-        }
-
-        // 继续游戏卡片（如果有存档且是该分类的关卡）
-        if (savedLevelNum > 0 && ci == 0) {
-            // 在战斗栏底部放继续游戏卡片
-            qreal cardX = colX + (colW - cardW) / 2.0;
-            QRectF cr(cardX, curY + 15, cardW, cardH);
-            cardRects.append(cr);
-            cardLevelNums.append(-1); // -1 表示继续游戏
-
-            QGraphicsRectItem* card = new QGraphicsRectItem(cr);
-            card->setBrush(QBrush(QColor(30, 70, 30, 210)));
-            card->setPen(QPen(QColor(100, 200, 100), 2));
-            card->setZValue(2000);
-            scene->addItem(card);
-            levelCards.append(card);
-
-            QGraphicsTextItem* label = new QGraphicsTextItem(QString("继续游戏\n(关卡%1)").arg(savedLevelNum));
-            label->setFont(QFont("SimHei", 11, QFont::Bold));
-            label->setDefaultTextColor(QColor(180, 255, 180));
-            label->setZValue(2001);
-            double tw = label->boundingRect().width();
-            double th = label->boundingRect().height();
-            label->setPos(cardX + (cardW - tw) / 2.0, cr.y() + (cardH - th) / 2.0);
-            scene->addItem(label);
-            cardLabels.append(label);
-        }
+        // 模式描述
+        QGraphicsTextItem* desc = new QGraphicsTextItem(modes[i].desc);
+        desc->setFont(QFont("SimHei", 11));
+        desc->setDefaultTextColor(QColor(200, 200, 200));
+        desc->setZValue(2001);
+        double dw = desc->boundingRect().width();
+        desc->setPos(btnX + (btnW - dw) / 2.0, curY + btnH - 24);
+        scene->addItem(desc);
+        cardLabels.append(desc);
     }
 
     // 底部提示
-    menuText = new QGraphicsTextItem("- 按数字键1-6选关 · 按ESC返回主菜单 -");
+    menuText = new QGraphicsTextItem("- 按 ESC 返回主菜单 -");
     menuText->setFont(QFont("SimHei", 13, QFont::Bold));
     menuText->setDefaultTextColor(QColor(200, 200, 200));
     menuText->setZValue(2000);
     double tw = menuText->boundingRect().width();
-    menuText->setPos(cx + (vw - tw) / 2.0, colStartY + 210);
+    menuText->setPos(cx + (SCREEN_W - tw) / 2.0, startY + 2 * (btnH + btnSpacing) + 10);
     scene->addItem(menuText);
 
-    view->centerOn(500, 900);
     for (QGraphicsRectItem* bg : backgroundLayers) {
         bg->setPos(500 - bg->rect().width() / 2.0, 0);
     }
     currentState = LevelSelect;
     timer->start(16);
+}
+
+void MainWindow::showBossSelect() {
+    // 保留 overlay，移除之前的模式按钮和文字
+    for (auto* c : levelCards) { scene->removeItem(c); delete c; }
+    levelCards.clear();
+    for (auto* l : cardLabels) { scene->removeItem(l); delete l; }
+    cardLabels.clear();
+    cardRects.clear();
+    cardLevelNums.clear();
+    if (menuText) { scene->removeItem(menuText); delete menuText; menuText = nullptr; }
+
+    // 清理旧的 boss 选择 UI（防止残留）
+    for (auto* c : bossCards) { scene->removeItem(c); delete c; }
+    bossCards.clear();
+    for (auto* l : bossCardLabels) { scene->removeItem(l); delete l; }
+    bossCardLabels.clear();
+    for (auto* img : bossCardImages) { scene->removeItem(img); delete img; }
+    bossCardImages.clear();
+    bossCardRects.clear();
+    bossSelectTypes.clear();
+    if (bossBackLabel) { scene->removeItem(bossBackLabel); delete bossBackLabel; bossBackLabel = nullptr; }
+
+    isBossSelect = true;
+    modeSelection = 0;
+
+    view->centerOn(SCREEN_W / 2.0, SCREEN_H / 2.0);
+    QPointF tl = view->mapToScene(0, 0);
+    qreal cx = tl.x();
+    qreal cy = tl.y();
+
+    // 标题
+    if (selectTitle) {
+        selectTitle->setPlainText("选择Boss");
+    }
+
+    // 三个 Boss 信息
+    struct BossInfo {
+        QString name;
+        QString desc;
+        QString spritePath;
+        int type;       // 1,2,3
+        int frameCount; // 竖排帧数
+    };
+    BossInfo bosses[] = {
+        {"克苏鲁之脑", "疯狂的紫色眼球", ":/tu/brainofcthlu.png", 1, 8},
+        {"猪鲨公爵",   "凶猛的鲨鱼Boss",  ":/tu/pig_shark.png",  2, 8},
+        {"冰雪之神",   "冰霜雪花守护者",  ":/tu/ice god.png",    3, 6},
+    };
+
+    // 布局：3张卡片水平排列
+    int cardCount = 3;
+    qreal cardW = 200, cardH = 280, spacing = 30;
+    qreal totalW = cardCount * cardW + (cardCount - 1) * spacing;
+    qreal startX = cx + (SCREEN_W - totalW) / 2.0;
+    qreal startY = cy + (SCREEN_H - cardH) / 2.0 + 30;
+
+    for (int i = 0; i < cardCount; i++) {
+        qreal curX = startX + i * (cardW + spacing);
+        QRectF br(curX, startY, cardW, cardH);
+        bossCardRects.append(br);
+        bossSelectTypes.append(20 + bosses[i].type); // 21,22,23
+
+        // 卡片背景
+        QGraphicsRectItem* card = new QGraphicsRectItem(br);
+        card->setBrush(QBrush(QColor(50, 50, 80, 200)));
+        card->setPen(QPen(QColor(150, 150, 200), 2));
+        card->setZValue(2000);
+        scene->addItem(card);
+        bossCards.append(card);
+
+        // Boss 图片（加载 sprite 的第一帧，缩放到合适大小）
+        QPixmap sheet(bosses[i].spritePath);
+        QPixmap bossPix;
+        if (!sheet.isNull()) {
+            // 取 sprite 第一帧（竖排多帧，取第一帧高度 = 总高 / 帧数）
+            int frameH = sheet.height() / bosses[i].frameCount;
+            bossPix = sheet.copy(0, 0, sheet.width(), frameH);
+            bossPix = bossPix.scaled(160, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        } else {
+            // 兜底：彩色方块
+            bossPix = QPixmap(160, 160);
+            bossPix.fill(Qt::transparent);
+            QPainter p(&bossPix);
+            p.setBrush(QColor(100, 100, 200));
+            p.setPen(Qt::NoPen);
+            p.drawRect(0, 0, 160, 160);
+            p.end();
+        }
+
+        QGraphicsPixmapItem* pImg = new QGraphicsPixmapItem(bossPix);
+        pImg->setPos(curX + (cardW - bossPix.width()) / 2.0, startY + 15);
+        pImg->setZValue(2001);
+        scene->addItem(pImg);
+        bossCardImages.append(pImg);
+
+        // Boss 名称
+        QGraphicsTextItem* nameLabel = new QGraphicsTextItem(bosses[i].name);
+        nameLabel->setFont(QFont("SimHei", 18, QFont::Bold));
+        nameLabel->setDefaultTextColor(Qt::white);
+        nameLabel->setZValue(2001);
+        double nw = nameLabel->boundingRect().width();
+        nameLabel->setPos(curX + (cardW - nw) / 2.0, startY + cardH - 65);
+        scene->addItem(nameLabel);
+        bossCardLabels.append(nameLabel);
+
+        // 描述
+        QGraphicsTextItem* descLabel = new QGraphicsTextItem(bosses[i].desc);
+        descLabel->setFont(QFont("SimHei", 11));
+        descLabel->setDefaultTextColor(QColor(200, 200, 200));
+        descLabel->setZValue(2001);
+        double dw = descLabel->boundingRect().width();
+        descLabel->setPos(curX + (cardW - dw) / 2.0, startY + cardH - 35);
+        scene->addItem(descLabel);
+        bossCardLabels.append(descLabel);
+    }
+
+    // 返回按钮
+    bossBackLabel = new QGraphicsTextItem("← 返回");
+    bossBackLabel->setFont(QFont("SimHei", 16, QFont::Bold));
+    bossBackLabel->setDefaultTextColor(QColor(180, 180, 255));
+    bossBackLabel->setZValue(2001);
+    bossBackLabel->setPos(cx + 30, cy + SCREEN_H - 60);
+    scene->addItem(bossBackLabel);
 }

@@ -37,6 +37,7 @@ public:
     qreal ambushMaxRange = 150;
     bool ambushOriginSet = false;
     void resetAmbush();
+    QPainterPath shape() const override;
 
 private:
     TileType m_type;

@@ -10,6 +10,7 @@ SOURCES += \
     brainofcthulhu.cpp \
     cake.cpp \
     checkpoint.cpp \
+    crate.cpp \
     dukefishron.cpp \
     enemy.cpp \
     icegod.cpp \
@@ -18,6 +19,7 @@ SOURCES += \
     gameobject.cpp \
     player.cpp \
     projectile.cpp \
+    star.cpp \
     tile.cpp \
     xuehua.cpp
 
@@ -29,6 +31,7 @@ HEADERS += \
     brainofcthulhu.h \
     cake.h \
     checkpoint.h \
+    crate.h \
     dukefishron.h \
     enemy.h \
     icegod.h \
@@ -36,6 +39,7 @@ HEADERS += \
     gameobject.h \
     player.h \
     projectile.h \
+    star.h \
     tile.h \
     xuehua.h
 

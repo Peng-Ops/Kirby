@@ -206,6 +206,14 @@ Player::Player() {
             for (int i = 0; i < count; i++)
                 roll.push_back(rollSheet.copy(i * fh, 0, fh, fh));
         }
+        // 攻击
+        QPixmap attackSheet(":/tu/" + prefix + "_attack.png");
+        if (!attackSheet.isNull()) {
+            int fh = attackSheet.height();
+            int count = attackSheet.width() / fh;
+            for (int i = 0; i < count; i++)
+                attack.push_back(attackSheet.copy(i * fh, 0, fh, fh));
+        }
     };
 
 
@@ -244,6 +252,11 @@ void Player::startExplosion() {
 }
 void Player::startRoll() {
     if (isRolling || isExploding || isAttacking || isLeafSkill || isSwallowing || isSpitting || isDigesting || isFireSprinting) return;
+    // 电形态飞行时按K变为冲刺（不翻滚）
+    if (isLightningFlying) {
+        startLightningDash();
+        return;
+    }
     // 根据形态选择翻滚帧
     QVector<QPixmap>* activeRollFrames = &rollFrames;
     if (currentForm == Enemy::FIRE && !fireRollFrames.isEmpty()) activeRollFrames = &fireRollFrames;
@@ -270,6 +283,24 @@ void Player::endRoll() {
     isRolling = false;
     // 恢复到地面待机或空中状态（交由下次updateLogic判断）
     setState(isOnGround ? IDLE : JUMPING);
+}
+
+void Player::startLightningDash() {
+    isLightningDashing = true;
+    lightningDashTimer = 15;     // 冲刺持续 15 帧 (~0.25秒)
+    // 冲刺时用一个快速动画帧
+    if (!lightningJumpFrames.isEmpty()) {
+        QPixmap img = lightningJumpFrames[0];
+        if (!facingRight) img = img.transformed(QTransform().scale(-1, 1));
+        setOffset((48 - img.width()) / 2.0, 48 - img.height());
+        setPixmap(img);
+    }
+}
+
+void Player::endLightningDash() {
+    isLightningDashing = false;
+    lightningDashTimer = 0;
+    // 恢复电形态飞行
 }
 
 void Player::updateLogic() {
@@ -312,6 +343,29 @@ void Player::updateLogic() {
         else setVisible(true);
     } else {
         setVisible(true);
+    }
+
+    // ====== 电形态飞行冲刺（按K触发，向前突进一段） ======
+    if (isLightningDashing) {
+        vx = facingRight ? 15.0 : -15.0;
+        lightningDashTimer--;
+        if (lightningDashTimer <= 0) {
+            endLightningDash();
+        }
+        // 冲刺时播放飞行帧
+        animTimer++;
+        if (animTimer >= 3) {
+            animTimer = 0;
+            currentFrame++;
+            if (currentFrame >= lightningJumpFrames.size()) currentFrame = 0;
+            if (!lightningJumpFrames.isEmpty()) {
+                QPixmap img = lightningJumpFrames[currentFrame];
+                if (!facingRight) img = img.transformed(QTransform().scale(-1, 1));
+                setOffset((48 - img.width()) / 2.0, 48 - img.height());
+                setPixmap(img);
+            }
+        }
+        return;
     }
 
     // ====== 新技能：电形态飞行拦截 ======
@@ -638,7 +692,7 @@ void Player::updateLogic() {
 }
 QPainterPath Player::shape() const {
     QPainterPath path;
-    path.addRect(0, 0, 48, 48);
+    path.addRect(4, 4, 40, 44);
     return path;
 }
 // ====== 1. 纯净版的普通攻击 ======

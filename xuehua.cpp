@@ -10,6 +10,7 @@ Xuehua::Xuehua(IceGod* owner, Player* target)
     hp = 3;
     damage = 1;
     ignoresTiles = true; // 飞行单位，无视地形
+    orbitRadius = IceGod::frameSize * 0.75; // 轨道半径随Boss大小自适应
 
     // 加载雪花贴图（竖6帧）
     QPixmap sheet(":/tu/xuehuaguai.png");
@@ -61,7 +62,7 @@ Xuehua::Xuehua(IceGod* owner, Player* target)
 
 QPainterPath Xuehua::shape() const {
     QPainterPath path;
-    path.addRect(0, 0, 58, 58);
+    path.addRect(4, 4, 50, 50);
     return path;
 }
 
@@ -84,8 +85,8 @@ void Xuehua::updateLogic() {
     orbitAngle += angularSpeed;
     if (orbitAngle > 2 * M_PI) orbitAngle -= 2 * M_PI;
 
-    double cx = iceGod->x() + 48; // IceGod中心X (frameSize/2)
-    double cy = iceGod->y() + 48; // IceGod中心Y
+    double cx = iceGod->x() + IceGod::frameSize / 2.0; // IceGod中心X
+    double cy = iceGod->y() + IceGod::frameSize / 2.0; // IceGod中心Y
     double nx = cx + std::cos(orbitAngle) * orbitRadius - 29; // 29 = 58/2
     double ny = cy + std::sin(orbitAngle) * orbitRadius - 29;
     setPos(nx, ny);
@@ -110,7 +111,7 @@ void Xuehua::updateLogic() {
                 atkFrames[0],   // 贴图
                 0,              // vx = 0，垂直落下
                 1.0,            // 初始微小的向下速度
-                150,            // 寿命2.5秒（足够落到地面）
+                99999,            // 无限距离
                 1               // 伤害
             );
             p->animFrames = atkFrames;

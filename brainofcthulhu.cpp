@@ -79,7 +79,7 @@ void BrainOfCthulhu::setFrame(QPixmap img, bool flipLeft) {
 
 QPainterPath BrainOfCthulhu::shape() const {
     QPainterPath path;
-    path.addRect(0, 0, frameSize, frameSize);
+    path.addRect(8, 8, 80, 80);
     return path;
 }
 
@@ -215,7 +215,7 @@ void BrainOfCthulhu::updateLogic() {
                     attackFrames[0],           // 初始贴图
                     std::cos(angle) * speed,   // vx
                     std::sin(angle) * speed,   // vy
-                    120,                        // 寿命2秒
+                    99999,                        // 无限距离
                     1                           // 伤害
                 );
                 p->animFrames = attackFrames;  // 设置动画帧
