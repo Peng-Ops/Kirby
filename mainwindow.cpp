@@ -170,7 +170,7 @@ MainWindow::MainWindow(QWidget *parent)
     bossHpBarFg->setPen(Qt::NoPen);
     bossHpBarFg->setZValue(2001);
     bossHpBarFg->setVisible(false);
-    scene->addItem(bossHpBarFg);
+    scene->addItem(bossHpBarFg);*/
 
     //初始化生命值 HUD 图标
     QPixmap lifePix(":/tu/life.png");
@@ -264,100 +264,37 @@ void MainWindow::loadLevel(int levelNum) {
     if (!scene) return; // 安全检查
     qreal sceneH = scene->sceneRect().height();
 
-    // 2. 根据关卡数,选择不同的矩阵(6关,3类)
+    // 2. 根据关卡数，选择不同的矩阵
     QStringList levelData;
-    if (levelNum == 1) { // 战斗: 星之绿地
+    if (levelNum == 1) {
         levelData = {
-            ".................................................................66............................",
-            "...........................................1111..................66............................",
-            "...........................................2222.........I.........66.......................P....",
-            "..............1111.........F..................22222......1111......66....................2222222",
-            ".....P........2222.......1111.....G...........22222..L...22222.....66....................2222222",
-            "....1111......22222......2222....1111............................22222....F..............2222222",
-            "...P2222....222222......2222...P2222....I....1111................22222...1111............2222222",
-            "...111111....2222222..G.......111111....1111...2222....F.........22222...2222...I........2222222",
-            "11112222111122222221111111111122222111112222..22222...1111..L....22222..22222..1111.......2222222",
-            "2222222222222222222222222222222222222222222111112222111222211111222222111222211222211111112222222",
-            "2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+            ".................................................................66.........................", // 1
+            ".................................................................66.........................", // 2 碎石高墙顶部
+            "...........................................1111..................66.........................", // 3 高空浮岛（草地）
+            "...........................................2222..................66.....................P...", // 4 高空浮岛（泥土）
+            "...........................................7777......F...........66..................2222222", // 5 悬空冰块阶梯 1
+            "...................................................5555..........66..................2222222", // 6
+            ".................................................................66..................2222222", // 7 悬空冰块阶梯 2 -> 右侧高台有检查点 C
+            "...............................................55................66..................2222222", // 8 终点前的高台
+            ".........................C.......................................66..................2222222", // 9 出生点草地
+            ".......................11119....I...333333333....................22222.......L.......2222222", // 10 坑底：铺满地刺或水体
+            "..................P....2222111111111444444444.C..F.....G..F..I...22222....1111111....2222222", // 11 底部支撑
+            "11111111111111111111111222222222222244444444411111111166666111111222228888222222211112222222",
+            "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
         };
-    } else if (levelNum == 2) { // 跑酷: 刺之回廊
+    } else if (levelNum == 2) {
         levelData = {
-            "..............................................................................................",
-            "..............................................................................................",
-            ".....1111...........S...............1111...................1111..................S..............",
-            ".P...2222..S.......1111....S.........2222....S............2222....S............1111....S........",
-            "....22222..1111....2222...1111......P2222...1111..........2222...1111...........2222...1111......",
-            "...P2222...2222....2222...2222.......2222...2222...S......2222..P2222..S.......2222..P2222......",
-            "....2222..P2222...2222...2222.......2222...2222..1111....2222..P2222..1111....2222..P2222..T....",
-            "...22222........T........P2222..T.........P...T..2222..T..........P...T..2222............T.....",
-            "...22222..T........T.........T...........T........2222.......T...........2222.......T..........",
-            "..P2222......T........T................T............P............T...........P.......T.........",
-            "..22222...........T...........T.............T............T..............T............T.........",
-            "111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111.",
-            "2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+            "...................C......",
+            "111111.....5555....6666...", // 第二关加点冰块和火怪
+            "222222.....2222....2222..."
         };
-    } else if (levelNum == 3) { // 坑爹: 寒冰炼狱
+    } else if (levelNum == 3) {
         levelData = {
-            "..............................................................................................",
-            "...................................1111.......................................................",
-            ".........................S.........2222...S..............55...................................",
-            "........................1111.......22222..1111..........P5555..W..............................",
-            "............W...........2222..............2222......E....5555.........X.......................",
-            "...........1111.....S...2222..X...........2222.....1111..5555...S.....1111....................",
-            "....P......2222....1111.22222.1111....W...2222.....2222..5555..1111....2222...........X.......",
-            "...1111....222.2...2222.22222.2222...1111...........22222......P2222....2222....E.............",
-            "...P2222...22222...22222....S..2222...2222..X.......22222..S....2222...P2222...1111...........",
-            "..122221...222222...22222..11112222..12222..1111....22222.1111..12222...12222...P2222..E.......",
-            ".11222221111222222111222221112222221112222111222211112222211222111222211112222111222221111......",
-            "112222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222.",
-            "2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
-        };
-    } else if (levelNum == 4) { // 跑酷: 云中回廊
-        levelData = {
-            "..............................................................................................",
-            ".........66.................66................66................................................",
-            "...S.....66.......S.........66.......S........66........S.........1111.........S...............",
-            "..1111...........1111................1111................1111.......2222......1111..............",
-            "..P222..S........P222..S.....S.......P222..S.....S.......P222..S....22222.....P222...S...S.....",
-            "..P222.1111......P222.1111..1111.....P222.1111..1111.....P222.1111...22222...T.P222..1111.1111..",
-            "..P222.P222......P222.P222..P222.....P222.P222..P222.....P222.P222...P2222......P222..P222.P222.",
-            "....T..22222..T....T..22222..22222.T....T..22222..22222.T....T..22222....T...T....T..22222..T...",
-            "...T......P....T....T.....P....T....T....T.....P....T....T....T.....P.......T....T.....P.......",
-            "..2222...........2222...........2222...........2222...........2222...........2222..............",
-            ".12222111111111112222111111111112222111111111112222111111111112222111111111112222111111111111111",
-            "1122222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
-        };
-    } else if (levelNum == 5) { // 战斗: 熔岩堡垒
-        levelData = {
-            "..............................................................................................",
-            ".............1111.........................1111.........................1111...................",
-            ".....P.......2222..F..........P............2222...F........P...........2222..F..........P......",
-            "....1111.....22222.1111......1111.....F....22222.1111......1111....F...22222.1111......1111.....",
-            "...P2222..I..77777.P2222....P2222....1111.....888.P2222....P2222...1111..777.P2222....P2222....",
-            "...P2222.....77777..22222..P.2222.I..2222...........22222..P.2222.I.2222........P2222..P.2222...",
-            "...12222..F..77777.12222....12222....2222..F........12222...12222....2222..F.......12222.L......",
-            "...12222111112222221222211111222211111222211111111111222211111222211111222211111111112222111111..",
-            "..P22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222.",
-            "..1222211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111.",
-            "1122222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
-        };
-    } else if (levelNum == 6) { // 坑爹: 暗影洞穴
-        levelData = {
-            "..............................................................................................",
-            "..................................1111.......................................................",
-            "..................X............E..2222...X...........1111.........................X..........",
-            ".................1111..............22222..1111........2222....E...............W..............",
-            ".........W.......2222...X....E.....22222..2222...E....22222..1111......X...1111..............",
-            "........1111.....2222..1111.......P2222..P2222..1111....2222..2222.....1111.2222......E......",
-            ".P......P2222....P2222.P2222.......2222...222...P2222..P2222..P2222....P2222........1111.....",
-            "1122....12222....12222.12222..X...12222..12222..12222..12222..12222...P12222.X......P2222.....",
-            "2222....22222....22222.22222.1111..22222..22222..22222..22222..22222....22222.1111..P2222..X..",
-            "2222....22222....22222.22222.2222..2222...22222..22222..22222..22222....22222.2222..P2222.1111",
-            "22221111222221111222221122221122221122221112222111222221122221122221111222221122211112222112222",
-            "222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+            ".........333333........C..", // 第三关全是水
+            "111111...444444...1111111.",
+            "222222...222222...2222222."
         };
     }
-
 
     int totalMapHeight = levelData.size() * renderSize;
     int bottomOffset = sceneH - totalMapHeight;
@@ -404,15 +341,6 @@ void MainWindow::loadLevel(int levelNum) {
                 enemies.append(lightningEnemy);
                 continue;
             }
-            // ====== Apple 追踪苹果 E ======
-            else if (type == 'E') {
-                Apple* apple = new Apple();
-                apple->setPos(c * renderSize, r * renderSize + bottomOffset);
-                apple->setScale(1.0);
-                scene->addItem(apple);
-                enemies.append(apple);
-                continue;
-            }
             else if (type == '1')  tile = new Tile(Tile::Grass, grass);
             else if (type == '2')  tile = new Tile(Tile::Dirt, dirt);
             else if (type == '3')  tile = new Tile(Tile::WaterSurface, waterSurface);
@@ -424,8 +352,6 @@ void MainWindow::loadLevel(int levelNum) {
             else if (type == '9')  tile = new Tile(Tile::Spike, ci3Pix);
             else if (type == 'A')  tile = new Tile(Tile::Spike, qiangciPix);
             else if (type == 'B')  tile = new Tile(Tile::Spike, daociPix);
-            // ====== 伏击刺 X ======
-            else if (type == 'X')  tile = new Tile(Tile::AmbushSpike, ciPix);
             else if (type == 'C'){
                 Cake* cake = new Cake();
                 cake->setPos(c * renderSize, r * renderSize + bottomOffset);
@@ -443,51 +369,13 @@ void MainWindow::loadLevel(int levelNum) {
                 checkpoints.append(cp); // 塞进主循环检测的检查点列表
                 continue; // 检查点处理完，直接跳过下面的 tile 判定
             }
-            // ====== 移动刺 S/T/U/W ======
-            else if (type == 'S') {
-                Tile* tile = new Tile(Tile::Spike, ciPix);
-                tile->setPos(c * renderSize, r * renderSize + bottomOffset);
-                tile->setScale(2.0);
-                tile->enableMove(Tile::Horizontal, 2.0, 96);
-                scene->addItem(tile);
-                floors.append(tile); spikes.append(tile);
-                continue;
-            }
-            else if (type == 'T') {
-                Tile* tile = new Tile(Tile::Spike, ci2Pix);
-                tile->setPos(c * renderSize, r * renderSize + bottomOffset);
-                tile->setScale(2.0);
-                tile->enableMove(Tile::Vertical, 1.5, 72);
-                scene->addItem(tile);
-                floors.append(tile); spikes.append(tile);
-                continue;
-            }
-            else if (type == 'U') {
-                Tile* tile = new Tile(Tile::Spike, daociPix);
-                tile->setPos(c * renderSize, r * renderSize + bottomOffset);
-                tile->setScale(2.0);
-                tile->enableMove(Tile::Horizontal, 2.5, 120);
-                scene->addItem(tile);
-                floors.append(tile); spikes.append(tile);
-                continue;
-            }
-            else if (type == 'W') {
-                Tile* tile = new Tile(Tile::Spike, qiangciPix);
-                tile->setPos(c * renderSize, r * renderSize + bottomOffset);
-                tile->setScale(2.0);
-                tile->enableMove(Tile::Vertical, 2.0, 80);
-                scene->addItem(tile);
-                floors.append(tile); spikes.append(tile);
-                continue;
-            }
-
             if (tile) {
                 tile->setPos(c * renderSize, r * renderSize + bottomOffset);
                 tile->setScale(2.0);
                 scene->addItem(tile);
                 if (type == '1' || type == '2' || type == '5' || type == '6') floors.append(tile);
                 else if (type == '3' || type == '4') waters.append(tile);
-                if (type == '7' || type == '8' || type == '9' || type == 'A' || type == 'B' || type == 'X') {
+                if (type == '7' || type == '8' || type == '9' || type == 'A' || type == 'B') {
                     floors.append(tile);  // 刺也能站上去（物理碰撞）
                     spikes.append(tile);  // 但对玩家造成伤害
                 }
@@ -495,37 +383,11 @@ void MainWindow::loadLevel(int levelNum) {
         }
     }
 
-    // Boss已在enemies循环中delete，置空防止悬空指针
-    dukeFishron = nullptr;
-    brainOfCthulhu = nullptr;
-    iceGod = nullptr;
-
-    // 4. 重生卡比（必须在Boss创建之前）
+    // 4. 重生卡比
     player = new Player();
-    player->setPos(800, bottomOffset - 100);
+    player->setPos(800, 856);
     scene->addItem(player);
-    lastCheckpointPos = QPointF(800, bottomOffset - 100);
-
-    // ====== Boss动态生成配置（战斗关卡Boss不在此创建，由gameUpdate检测位置后生成）======
-    pendingBossType = 0;
-    bossSpawnX = (levelData[0].length() - 10) * renderSize;
-    bossSpawnY = 400;
-    bossSpawned = false;
-
-    if (levelNum == 1)      pendingBossType = 1; // 克苏鲁之脑
-    else if (levelNum == 5) pendingBossType = 2; // 猪鲨
-    // 跑酷(2,4)和坑爹(3,6)关卡无Boss
-
-    // ====== 终点旗（关卡最右端） ======
-    {
-        int groundRow = levelData.size() - 2;
-        qreal goalX = (levelData[0].length() - 5) * renderSize;
-        Goal* goal = new Goal();
-        goal->setPos(goalX, groundRow * renderSize + bottomOffset - 48);
-        scene->addItem(goal);
-        goals.append(goal);
-    }
-
+    lastCheckpointPos = QPointF(800, 856);
     // 5. 切换 UI 状态 (隐藏菜单字，显示 HUD)
     if (titleText) titleText->setVisible(false);
     if (hintText)  hintText->setVisible(false);
@@ -908,10 +770,19 @@ void MainWindow::gameUpdate() {
         if (enterPressed) {
             player->vx = 0;
             if (player->isOnGround){
-                enterPressed = false;
+                enterPressed = false;      // 重置标记
                 if (titleText) { scene->removeItem(titleText); delete titleText; titleText = nullptr; }
                 if (hintText) { scene->removeItem(hintText); delete hintText; hintText = nullptr; }
-                showMainMenu();
+                // 进入【选关界面】
+                currentState = LevelSelect;
+
+                // 刷新屏幕上的文字提示
+                menuText = new QGraphicsTextItem("\t SELECT LEVEL:\n\nPress [ 1 ] for Level 1\nPress [ 2 ] for Level 2\nPress [ 3 ] for Level 3");
+                menuText->setFont(QFont("SimHei", 24, QFont::Bold));
+                menuText->setDefaultTextColor(Qt::white);
+                menuText->setZValue(2000);
+                menuText->setPos(300, 580); // 回到屏幕中央上方
+                scene->addItem(menuText);
                 return;
             }
 
@@ -992,43 +863,23 @@ void MainWindow::gameUpdate() {
         return;
     }
     if (currentState == LevelSelect) {
-        if (keys.contains(Qt::Key_Escape)) {
-            keys.remove(Qt::Key_Escape);
-            cleanupSelectUI();
-            showMainMenu();
-            return;
-        }
-        if (savedLevelNum > 0 && keys.contains(Qt::Key_0)) {
-            keys.remove(Qt::Key_0);
-            cleanupSelectUI();
+        if (keys.contains(Qt::Key_1)) {
             currentState = PLAYING;
-            loadLevel(savedLevelNum);
-            player->setPos(savedCheckpointPos.x(), savedCheckpointPos.y());
-            player->hp = savedHP;
-            player->stamina = savedStamina;
-            player->currentForm = savedForm;
-            player->attackPowerTimer = savedAttackPowerTimer;
-            player->invulnTimer = 60;
-            lastCheckpointPos = savedCheckpointPos;
-            savedLevelNum = 0;
-            return;
+            menuText->setVisible(false); // 隐藏菜单文字
+            loadLevel(1);                // 加载第一关
         }
-        // 检查按键1-6选择关卡
-        for (int lv = 1; lv <= 6; lv++) {
-            if (keys.contains(static_cast<Qt::Key>(Qt::Key_1 + lv - 1))) {
-                keys.remove(static_cast<Qt::Key>(Qt::Key_1 + lv - 1));
-                currentState = PLAYING;
-                cleanupSelectUI();
-                loadLevel(lv);
-                return;
-            }
+        else if (keys.contains(Qt::Key_2)) {
+            currentState = PLAYING;
+            menuText->setVisible(false);
+            loadLevel(2);                // 加载第二关
         }
-        return;
+        else if (keys.contains(Qt::Key_3)) {
+            currentState = PLAYING;
+            menuText->setVisible(false);
+            loadLevel(3);                // 加载第三关
+        }
+        return; // 拦截
     }
-
-    if (currentState == MAIN_MENU) return;
-    if (currentState == SETTINGS) return;
-    if (currentState == GAME_OVER) return;
     // 阶段二：按下回车，卡比和地面一起左移
     /*if (currentState == PLAYING) {
         for (Enemy* e : enemies) e->setVisible(true);
@@ -1522,9 +1373,7 @@ void MainWindow::gameUpdate() {
                     break;
                 }
             }
-            MinionEnemy* minion = dynamic_cast<MinionEnemy*>(enemy);
-            bool movingRight = minion ? minion->isFacingRight() : (enemy->vx > 0);
-            qreal lookAheadX = movingRight ? eRect.right() + 7 : eRect.left() - 7;
+            qreal lookAheadX = (enemy->vx > 0) ? eRect.right() + 7 : eRect.left() - 7;
             qreal footY = eRect.bottom() + 5; // 往脚底下偏离2个像素，确保能踩到地面
             QPointF checkPoint(lookAheadX, footY);
 
@@ -1780,10 +1629,6 @@ void MainWindow::gameUpdate() {
 
         for (Tile* spike : spikes) {
             QRectF sRect = spike->sceneBoundingRect();
-            // 缩小判定范围为刺的实际视觉区域（内缩60%）
-            qreal sx = sRect.width() * 0.35;
-            qreal sy = sRect.height() * 0.35;
-            sRect.adjust(sx, sy, -sx, -sy);
 
             if (pRect.intersects(sRect)) {
 

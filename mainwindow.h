@@ -82,14 +82,11 @@ private:
     QProgressBar* staminaBar; // 新增体力条指针
 
     // ====== 新增：游戏状态机枚举与控制变量 ======
-    enum GameState { START_SCREEN, MAIN_MENU, SETTINGS, LevelSelect, PLAYING, PAUSED, GAME_OVER };
-    enum PendingAction { ACT_NONE, ACT_SHOW_LEVEL_SELECT, ACT_CONTINUE_GAME, ACT_SHOW_SETTINGS,
-                         ACT_SHOW_MAIN_MENU, ACT_RESUME_GAME, ACT_RESTART_CHECKPOINT, ACT_EXIT };
-    PendingAction pendingAction = ACT_NONE;
+    enum GameState { START_SCREEN, LevelSelect, INTRO_PAN, PLAYING };
     GameState currentState = START_SCREEN;
     int introTimer = 0;
     void loadLevel(int levelNum); // 把你之前那一长串解析地图的代码，封装进这个函数
-    QGraphicsTextItem* menuText = nullptr;  // 用于在屏幕上显示提示文字
+    QGraphicsTextItem* menuText;  // 用于在屏幕上显示提示文字
 
     // UI文字元素
     QGraphicsTextItem* titleText = nullptr;
