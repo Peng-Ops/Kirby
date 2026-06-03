@@ -12,7 +12,7 @@
 
 class BrainOfCthulhu : public BossEnemy {
 public:
-    enum BossState { FLYING, ATTACKING };
+    enum BossState { FLYING, ATTACKING, PHASE2_TELEPORT, PHASE2_CHASE };
 
     BrainOfCthulhu(Player* target);
     void updateLogic() override;
@@ -20,7 +20,7 @@ public:
     void takeDamage(int dmg) override;
 
     BossState state = FLYING;
-    int fullHp = 100;
+    int fullHp = 400;
     bool isPhase2 = false;     // 半血进入二阶段
     int invulnTimer = 0;
 
@@ -50,6 +50,9 @@ private:
     int attackTimer = 0;
     int shootInterval = 18;       // 0.3秒发射一波（每秒约3.3波）
     int shootTimer = 0;
+    int phase2Timer = 0;
+    double teleportTargetX = 0;
+    double teleportTargetY = 0;
 
     // 场景边界
     static constexpr double sceneW = 5000.0;

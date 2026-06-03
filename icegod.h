@@ -32,7 +32,7 @@ public:
     void removeXuehua(Xuehua* x);
 
     State state = FLYING;
-    int fullHp = 100;
+    int fullHp = 600;
     int summonWave = 0;  // 0=初始, 1=2/3血, 2=1/3血
 
     QList<Xuehua*> xuehuas;

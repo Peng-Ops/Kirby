@@ -19,7 +19,7 @@ public:
 
     int hp = 1;
     bool isDead = false;
-    int damage = 1;
+    int damage = 10;
 
     // 给每个敌人身上带一个能力标签，默认没有能力
     CopyAbility ability = NONE;

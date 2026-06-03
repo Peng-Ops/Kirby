@@ -24,7 +24,7 @@ public:
 
     BossState state = FLYING;
     int invulnTimer = 0;      // 受击闪烁计时
-    int fullHp = 100;          // 满血值（血条用）
+    int fullHp = 300;          // 满血值（血条用）
 
     // ====== 二/三阶段标记 ======
     bool isPhase2 = false;

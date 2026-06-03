@@ -144,11 +144,12 @@ void IceGod::doIceSpread() {
                 std::cos(angle) * speed,
                 std::sin(angle) * speed,
                 99999,     // 无限距离
-                1
+                20
             );
             p->hurtsEnemies = false;
             p->hurtsPlayer = true;
             p->ignoresWalls = true;
+            p->causesSlow = true;
             p->setPos(this->x() + frameSize / 2.0 - 12,
                       this->y() + frameSize / 2.0 - 18);
             pendingProjectiles.append(p);
@@ -183,11 +184,12 @@ void IceGod::doIceBeam() {
                 std::cos(angle) * speed,
                 std::sin(angle) * speed,
                 99999,     // 无限距离
-                1
+                20
             );
             p->hurtsEnemies = false;
             p->hurtsPlayer = true;
             p->ignoresWalls = true;
+            p->causesSlow = true;
             p->setPos(this->x() + frameSize / 2.0 - 12,
                       this->y() + frameSize / 2.0 - 18);
             pendingProjectiles.append(p);
@@ -218,12 +220,13 @@ void IceGod::doIceRain() {
             (rand() % 100 - 50) * 0.02,    // 轻微水平偏移
             3.0 + (rand() % 100) * 0.03,    // 下落速度
             99999,                           // 无限距离
-            1
+            15
         );
         p->hasGravity = true;
         p->hurtsEnemies = false;
         p->hurtsPlayer = true;
         p->ignoresWalls = true;
+        p->causesSlow = true;
         p->setPos(x, this->y() - 50);
         pendingProjectiles.append(p);
         attackPhase++;

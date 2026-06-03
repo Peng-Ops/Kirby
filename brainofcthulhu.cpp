@@ -91,6 +91,11 @@ void BrainOfCthulhu::takeDamage(int dmg) {
     // 半血进入二阶段
     if (!isPhase2 && hp <= fullHp / 2) {
         isPhase2 = true;
+        state = PHASE2_TELEPORT;
+        phase2Timer = 0;
+        vx = 0; vy = 0;
+        damage = 0;
+        pendingProjectiles.clear();
     }
 }
 
@@ -104,22 +109,26 @@ void BrainOfCthulhu::pickNewTarget() {
     if (targetX < frameSize) targetX = frameSize;
     if (targetX > sceneW - frameSize) targetX = sceneW - frameSize;
     if (targetY < frameSize) targetY = frameSize;
-    if (targetY > sceneH - frameSize) targetY = sceneH - frameSize;
+    if (targetY > sceneH - frameSize - 100) targetY = sceneH - frameSize - 100;
 }
 
 void BrainOfCthulhu::updateLogic() {
     if (isDead || !player) return;
 
     // 受伤闪烁
-    if (invulnTimer > 0) {
-        invulnTimer--;
-        setVisible(invulnTimer % 2 == 0);
+    if (state != PHASE2_TELEPORT) {
+        if (invulnTimer > 0) {
+            invulnTimer--;
+            setVisible(invulnTimer % 2 == 0);
+        } else {
+            setVisible(true);
+        }
     } else {
-        setVisible(true);
+        if (invulnTimer > 0) invulnTimer--;
     }
 
     // 二阶段飞行加速
-    double currentFlySpeed = isPhase2 ? flySpeed * 1.4 : flySpeed;
+    double currentFlySpeed = isPhase2 ? flySpeed * 1.2 : flySpeed;
 
     switch (state) {
     // ========== 飞行 ==========
@@ -174,8 +183,9 @@ void BrainOfCthulhu::updateLogic() {
 
     // ========== 攻击（悬停+8方向弹幕）==========
     case ATTACKING: {
-        vx = 0; vy = 0;  // 悬停
-        damage = 1;
+        vx = std::cos(flyTimer * 0.05) * 2.0;
+        vy = std::sin(flyTimer * 0.07) * 2.5;
+        damage = 30;
 
         // 攻击动画：使用二阶段或普通的第一帧（张嘴帧）
         const QVector<QPixmap>& curFrames = isPhase2 ? phase2Frames : normalFrames;
@@ -193,7 +203,7 @@ void BrainOfCthulhu::updateLogic() {
         // 发射弹幕
         shootTimer++;
         // 二阶段射击更快
-        int interval = isPhase2 ? shootInterval / 2 : shootInterval;   // 二阶段0.5秒变0.25秒
+        int interval = shootInterval;
         if (shootTimer >= interval && !attackFrames.isEmpty()) {
             shootTimer = 0;
 
@@ -216,7 +226,7 @@ void BrainOfCthulhu::updateLogic() {
                     std::cos(angle) * speed,   // vx
                     std::sin(angle) * speed,   // vy
                     99999,                        // 无限距离
-                    1                           // 伤害
+                    30                           // 伤害
                 );
                 p->animFrames = attackFrames;  // 设置动画帧
                 p->hurtsEnemies = false;
@@ -237,6 +247,77 @@ void BrainOfCthulhu::updateLogic() {
             flyTimer = 0;
             vx = 0; vy = 0;
             damage = 0;
+        }
+        break;
+    }
+    case PHASE2_TELEPORT: {
+        vx = 0; vy = 0;
+        damage = 0;
+        phase2Timer++;
+
+        if (phase2Timer <= 15) {
+            setVisible(phase2Timer % 3 == 0);
+            break;
+        }
+        if (phase2Timer == 16) {
+            setVisible(false);
+            if (player) {
+                double angle = (rand() % 360) * M_PI / 180.0;
+                double dist = 180.0 + rand() % 180;
+                double tx = player->x() + std::cos(angle) * dist;
+                double ty = player->y() + std::sin(angle) * dist;
+                tx = std::max((double)frameSize, std::min(tx, sceneW - frameSize));
+                ty = std::max((double)frameSize, std::min(ty, sceneH - frameSize));
+                setPos(tx, ty);
+            }
+        }
+        if (phase2Timer > 16 && phase2Timer <= 30) {
+            setVisible(phase2Timer % 3 != 0);
+            break;
+        }
+        if (phase2Timer > 30) {
+            setVisible(true);
+            if (player && !phase2Frames.isEmpty()) {
+                bool flip = (player->x() < this->x());
+                setFrame(phase2Frames[currentFrame % phase2Frames.size()], flip);
+            }
+            state = PHASE2_CHASE;
+            phase2Timer = 0;
+            damage = 2;
+        }
+        break;
+    }
+    case PHASE2_CHASE: {
+        damage = 10;
+        phase2Timer++;
+
+        if (player) {
+            double dx = player->x() + 24 - (this->x() + frameSize / 2.0);
+            double dy = player->y() + 24 - (this->y() + frameSize / 2.0);
+            double dist = std::sqrt(dx * dx + dy * dy);
+
+            double chaseSpeed = 7.0;
+            if (dist > 5) {
+                vx = (dx / dist) * chaseSpeed;
+                vy = (dy / dist) * chaseSpeed;
+            }
+
+            animTimer++;
+            if (animTimer >= 4 && !phase2Frames.isEmpty()) {
+                animTimer = 0;
+                currentFrame = (currentFrame + 1) % phase2Frames.size();
+                setFrame(phase2Frames[currentFrame], vx < 0);
+            }
+
+            if (dist < 55 || phase2Timer >= 150) {
+                state = PHASE2_TELEPORT;
+                phase2Timer = 0;
+                vx = 0; vy = 0;
+                damage = 0;
+            }
+        } else {
+            state = PHASE2_TELEPORT;
+            phase2Timer = 0;
         }
         break;
     }

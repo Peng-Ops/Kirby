@@ -100,5 +100,7 @@
         <file>tu/star.png</file>
         <file>tu/pigshark2.png</file>
         <file>tu/pigshark_attack.png</file>
+        <file>tu/qiu.png</file>
+        <file>tu/sword.png</file>
     </qresource>
 </RCC>

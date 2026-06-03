@@ -51,6 +51,9 @@ private slots:
 
 private:
     QList<QGraphicsPixmapItem*> lifeIcons; // 存放生命值图标的列表
+    QGraphicsRectItem* playerHpBarBg = nullptr;
+    QGraphicsRectItem* playerHpBarFg = nullptr;
+    int playerMaxHp = 3;
     Ui::MainWindow *ui;
     QGraphicsScene *scene;
     QGraphicsView *view;
@@ -104,6 +107,10 @@ private:
     bool cratePushSoundPlayed = false; // 木箱推动音效每帧只播一次
     int aiTimer = 0;
     QProgressBar* staminaBar; // 新增体力条指针
+    QGraphicsPixmapItem* swordItem    = nullptr;
+    int  swordSwingTimer               = 0;
+    bool isSwordSwinging               = false;
+    QSet<Enemy*> swordHitEnemies;      // 单次挥剑已命中的敌人
 
     // ====== DukeFishron二阶段背景过渡 ======
     QList<QGraphicsRectItem*> phase2BgLayers;
@@ -123,6 +130,10 @@ private:
     void triggerTutorialText(TutorialTrigger* t);
     void updateTutorialTexts();
     void cleanupTutorialTexts();
+
+    enum WeaponType { WEAPON_BULLET, WEAPON_SWORD };
+    WeaponType selectedWeapon = WEAPON_BULLET;
+    int pendingBossTypeTemp = 0;   // 武器选择期间暂存boss类型
 
     // ====== 游戏状态机枚举与控制变量 ======
     enum GameState { START_SCREEN, LevelSelect, INTRO_PAN, PLAYING, PAUSED, SETTINGS, MAIN_MENU, GAME_OVER, ENDING };
@@ -175,6 +186,15 @@ private:
     QList<QGraphicsTextItem*> categoryHeaders;
     int modeSelection = 0;     // 模式选择标记 (0=无, 1=冒险, 21=Boss1克苏鲁, 22=Boss2猪鲨, 23=Boss3冰雪)
 
+    bool isWeaponSelect = false;
+    QVector<QGraphicsRectItem*>    weaponCards;
+    QVector<QGraphicsTextItem*>    weaponCardLabels;
+    QVector<QGraphicsPixmapItem*>  weaponCardImages;
+    QVector<QRectF>                weaponCardRects;
+    QGraphicsTextItem*             weaponBackLabel = nullptr;
+    void showWeaponSelect();
+    void cleanupWeaponSelectUI();
+
     // ====== Boss选择子菜单 ======
     bool isBossSelect = false;
     QVector<QGraphicsRectItem*> bossCards;
@@ -213,6 +233,10 @@ private:
     int savedHP = 3;
     int savedStamina = 300;
     int savedAttackPowerTimer = 0;
+
+    // ====== 360度瞄准系统（Boss模式专用）======
+    double shootAngle = 0.0;
+    QGraphicsEllipseItem* aimDot = nullptr;
 
     // ====== Boss动态生成 ======
     int pendingBossType = 0;    // 0=无, 1=克苏鲁, 2=猪鲨, 3=冰雪

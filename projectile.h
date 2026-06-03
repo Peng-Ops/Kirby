@@ -16,6 +16,7 @@ public:
     bool hurtsEnemies = true;  // 玩家弹幕打敌人
     bool hasGravity = false;   // 是否受重力影响（冰锥等）
     bool ignoresWalls = false; // 是否无视地形碰撞（Boss弹幕用）
+    bool causesSlow = false;  // 该弹幕击中玩家时是否触发减速
 
     // 动画支持（Boss弹幕用）
     QVector<QPixmap> animFrames;

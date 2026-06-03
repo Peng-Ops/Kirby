@@ -7,8 +7,8 @@
 Xuehua::Xuehua(IceGod* owner, Player* target)
     : iceGod(owner), player(target)
 {
-    hp = 3;
-    damage = 1;
+    hp = 50;
+    damage = 5;
     ignoresTiles = true; // 飞行单位，无视地形
     orbitRadius = IceGod::frameSize * 0.75; // 轨道半径随Boss大小自适应
 

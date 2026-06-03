@@ -66,7 +66,7 @@ QPainterPath DukeFishron::shape() const {
 
 void DukeFishron::takeDamage(int dmg) {
     // 二阶段无敌
-    if (isPhase2) return;
+    if (state == PHASE_TWO) return;
 
     Enemy::takeDamage(dmg);
     if (!isDead && dmg > 0) {
@@ -271,7 +271,7 @@ void DukeFishron::updateLogic() {
                         attackFrames[attackAnimFrame],
                         std::cos(angle) * speed,
                         std::sin(angle) * speed,
-                        99999, 1
+                        99999, 10
                     );
                     p->hurtsEnemies = false;
                     p->hurtsPlayer = true;
@@ -295,7 +295,7 @@ void DukeFishron::updateLogic() {
                         attackFrames[attackAnimFrame],
                         std::cos(angle) * speed,
                         std::sin(angle) * speed,
-                        99999, 1
+                        99999, 10
                     );
                     p->hurtsEnemies = false;
                     p->hurtsPlayer = true;
@@ -320,7 +320,7 @@ void DukeFishron::updateLogic() {
             state = PHASE_THREE;
             isPhase3 = true;
             phase2Timer = 0;
-            damage = 1;  // 恢复可造成伤害
+            damage = 20;  // 恢复可造成伤害
 
             // 切回一阶贴图
             if (!allFrames.isEmpty()) {
@@ -386,8 +386,8 @@ void DukeFishron::updateLogic() {
         // 边界约束
         if (this->x() < 0) { this->setPos(0, this->y()); vx *= -1; }
         if (this->x() > sceneW - frameSize) { this->setPos(sceneW - frameSize, this->y()); vx *= -1; }
-        if (this->y() < 0) { this->setPos(this->x(), 0); vy *= -1; }
-        if (this->y() > sceneH - frameSize) { this->setPos(this->x(), sceneH - frameSize); vy *= -1; }
+        if (this->y() < 50) { this->setPos(this->x(), 0); vy *= -1; }
+        if (this->y() > sceneH - frameSize - 50) { this->setPos(this->x(), sceneH - frameSize); vy *= -1; }
 
         flyTimer++;
         if (flyTimer >= flyDuration) {
@@ -422,7 +422,7 @@ void DukeFishron::updateLogic() {
             state = CHARGING;
             chargeTimer = 0;
             chargeSpeed = 0;
-            damage = 1;
+            damage = 20;
 
             chargeCount++;  // 记录本次连冲计数
         }
