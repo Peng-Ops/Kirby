@@ -124,8 +124,122 @@ void IceGod::pickNewTarget() {
     targetY = player->y() + (rand() % 400 - 200);
     if (targetX < frameSize) targetX = frameSize;
     if (targetX > sceneW - frameSize) targetX = sceneW - frameSize;
-    if (targetY < frameSize) targetY = frameSize;
-    if (targetY > sceneH - frameSize) targetY = sceneH - frameSize;
+    // 限制Y在屏幕可见范围 [350, 900]
+    if (targetY < 350) targetY = 350;
+    if (targetY > 900) targetY = 900;
+}
+
+// ====== 冰锥圆形扩散 ======
+void IceGod::doIceSpread() {
+    vx = 0;
+    vy = 0;
+    attackTimer++;
+    if (attackTimer % 25 == 0) {
+        int count = 8 + (summonWave >= 1 ? 4 : 0) + (summonWave >= 2 ? 4 : 0);
+        double baseAngle = attackTimer * 0.03; // 每轮旋转，形成螺旋效果
+        double speed = 3.0 + summonWave * 0.5;
+        for (int i = 0; i < count; i++) {
+            double angle = 2 * M_PI * i / count + baseAngle;
+            Projectile* p = new Projectile(
+                projectileFrames[0],
+                std::cos(angle) * speed,
+                std::sin(angle) * speed,
+                99999,     // 无限距离
+                20
+            );
+            p->hurtsEnemies = false;
+            p->hurtsPlayer = true;
+            p->ignoresWalls = true;
+            p->causesSlow = true;
+            p->setPos(this->x() + frameSize / 2.0 - 12,
+                      this->y() + frameSize / 2.0 - 18);
+            pendingProjectiles.append(p);
+        }
+        attackPhase++;
+    }
+    if (attackPhase >= 3) {
+        attackPhase = 0;
+        attackTimer = 0;
+        state = FLYING;
+        flyTimer = 0;
+    }
+}
+
+// ====== 瞄准冰束 ======
+void IceGod::doIceBeam() {
+    if (!player) { state = FLYING; flyTimer = 0; return; }
+    vx = 0;
+    vy = 0;
+    attackTimer++;
+    if (attackTimer % 12 == 0 && attackPhase < 6) {
+        double dx = player->x() - this->x();
+        double dy = player->y() - this->y();
+        double baseAngle = std::atan2(dy, dx);
+        int beamCount = 3 + summonWave; // 3~5条
+        double spread = 0.12;           // 散射角度
+        double speed = 5.0 + summonWave * 0.5;
+        for (int i = 0; i < beamCount; i++) {
+            double angle = baseAngle + (i - (beamCount - 1) / 2.0) * spread;
+            Projectile* p = new Projectile(
+                projectileFrames[0],
+                std::cos(angle) * speed,
+                std::sin(angle) * speed,
+                99999,     // 无限距离
+                20
+            );
+            p->hurtsEnemies = false;
+            p->hurtsPlayer = true;
+            p->ignoresWalls = true;
+            p->causesSlow = true;
+            p->setPos(this->x() + frameSize / 2.0 - 12,
+                      this->y() + frameSize / 2.0 - 18);
+            pendingProjectiles.append(p);
+        }
+        attackPhase++;
+    }
+    if (attackPhase >= 6 || attackTimer > 120) {
+        attackPhase = 0;
+        attackTimer = 0;
+        state = FLYING;
+        flyTimer = 0;
+    }
+}
+
+// ====== 冰锥雨 ======
+void IceGod::doIceRain() {
+    if (!player) { state = FLYING; flyTimer = 0; return; }
+    vx = 0;
+    vy = 0;
+    attackTimer++;
+    if (attackTimer % 8 == 0) {
+        // 在玩家周围随机位置生成冰锥
+        double spread = 300.0 + summonWave * 50;
+        double x = player->x() + (rand() % (int)spread) - spread / 2.0;
+        x = std::max(0.0, std::min(x, sceneW - 50.0));
+        Projectile* p = new Projectile(
+            projectileFrames[0],
+            (rand() % 100 - 50) * 0.02,    // 轻微水平偏移
+            3.0 + (rand() % 100) * 0.03,    // 下落速度
+            99999,                           // 无限距离
+            15
+        );
+        p->hasGravity = true;
+        p->hurtsEnemies = false;
+        p->hurtsPlayer = true;
+        p->ignoresWalls = true;
+        p->causesSlow = true;
+        p->setPos(x, this->y() - 50);
+        pendingProjectiles.append(p);
+        attackPhase++;
+    }
+    // 持续射出一定数量后结束
+    int maxPhase = 12 + summonWave * 4;
+    if (attackPhase >= maxPhase || attackTimer > 180) {
+        attackPhase = 0;
+        attackTimer = 0;
+        state = FLYING;
+        flyTimer = 0;
+    }
 }
 
 // ====== 冰锥圆形扩散 ======
@@ -281,11 +395,11 @@ void IceGod::updateLogic() {
                 setFrame(normalFrames[currentFrame], vx < 0);
         }
 
-        // 边界
+        // 边界——限制在屏幕可见范围
         if (this->x() < 0) { this->setPos(0, this->y()); vx *= -1; }
         if (this->x() > sceneW - frameSize) { this->setPos(sceneW - frameSize, this->y()); vx *= -1; }
-        if (this->y() < 0) { this->setPos(this->x(), 0); vy *= -1; }
-        if (this->y() > sceneH - frameSize) { this->setPos(this->x(), sceneH - frameSize); vy *= -1; }
+        if (this->y() < 200) { this->setPos(this->x(), 200); vy *= -1; }
+        if (this->y() > 1050) { this->setPos(this->x(), 1050); vy *= -1; }
 
         flyTimer++;
         if (flyTimer >= flyDuration) {

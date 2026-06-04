@@ -199,12 +199,7 @@ MainWindow::MainWindow(QWidget *parent)
     bossHpBarFg->setVisible(false);
     scene->addItem(bossHpBarFg);
 
-    aimDot = new QGraphicsEllipseItem(0, 0, 10, 10);
-    aimDot->setBrush(QBrush(Qt::white));
-    aimDot->setPen(QPen(QColor(80, 80, 80), 1));
-    aimDot->setZValue(2100);
-    aimDot->setVisible(false);
-    scene->addItem(aimDot);
+
 
     //玩家血条
     playerHpBarBg = new QGraphicsRectItem(0, 0, 300, 12);
@@ -435,6 +430,19 @@ void MainWindow::loadLevel(int levelNum) {
         }
     }
 
+    // ====== 填平地图底部坑洞：将底部两行的空气(.)替换为泥土(2)，防止玩家坠落瞬移 ======
+    if (levelNum != 99 && levelData.size() >= 2) {
+        int rows = levelData.size();
+        for (int r = rows - 2; r < rows; r++) {
+            QString& row = levelData[r];
+            for (int c = 0; c < row.length(); c++) {
+                if (row[c] == '.') {
+                    row[c] = '2';
+                }
+            }
+        }
+    }
+
     int totalMapHeight = levelData.size() * renderSize;
     int bottomOffset = sceneH - totalMapHeight;
 
@@ -443,45 +451,41 @@ void MainWindow::loadLevel(int levelNum) {
             Tile *tile = nullptr;
             char type = levelData[r][c].toLatin1();
             if (type == 'I') {
-                MinionEnemy* iceEnemy = new MinionEnemy(":/tu/Ice_Dude.png", 6, 1.2, Enemy::ICE);
-                iceEnemy->setScale(0.6);
+                MinionEnemy* iceEnemy = new MinionEnemy(":/tu/Ice_Dude.png", 6, 1.2, Enemy::ICE, 0.6);
                 iceEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                //iceEnemy->setVisible(false);
+                iceEnemy->setPlayer(player);
                 scene->addItem(iceEnemy);
                 enemies.append(iceEnemy);
                 continue;
             }
             else if (type == 'F') {
-                MinionEnemy* fireEnemy = new MinionEnemy(":/tu/fire_enemy.png", 5, 1.5, Enemy::FIRE);
-                fireEnemy->setScale(2);
+                MinionEnemy* fireEnemy = new MinionEnemy(":/tu/fire_enemy.png", 5, 1.5, Enemy::FIRE, 2.0);
                 fireEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                //fireEnemy->setVisible(false);
+                fireEnemy->setPlayer(player);
                 scene->addItem(fireEnemy);
                 enemies.append(fireEnemy);
                 continue;
             }
             else if (type == 'G'){
-                MinionEnemy* leafEnemy = new MinionEnemy(":/tu/Leaf_Dude.png", 8, 1.0, Enemy::LEAF);
-                leafEnemy->setScale(0.6);
+                MinionEnemy* leafEnemy = new MinionEnemy(":/tu/Leaf_Dude.png", 8, 1.0, Enemy::LEAF, 0.6);
                 leafEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                //leafEnemy->setVisible(false);
+                leafEnemy->setPlayer(player);
                 scene->addItem(leafEnemy);
                 enemies.append(leafEnemy);
                 continue;
             }
             else if (type == 'L'){
-                MinionEnemy* lightningEnemy = new MinionEnemy(":/tu/Lightning_Dude.png", 6, 1.8, Enemy::SPARK);
-                lightningEnemy->setScale(0.6);
+                MinionEnemy* lightningEnemy = new MinionEnemy(":/tu/Lightning_Dude.png", 6, 1.8, Enemy::SPARK, 0.6);
                 lightningEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
-                //lightningEnemy->setVisible(false);
+                lightningEnemy->setPlayer(player);
                 scene->addItem(lightningEnemy);
                 enemies.append(lightningEnemy);
                 continue;
             }
             else if (type == 'E') {
-                MinionEnemy* basicEnemy = new MinionEnemy(":/tu/basic_enemy.png", 3, 1.0, Enemy::NONE);
-                basicEnemy->setScale(2.0);
+                MinionEnemy* basicEnemy = new MinionEnemy(":/tu/basic_enemy.png", 3, 1.0, Enemy::NONE, 2.0);
                 basicEnemy->setPos(c * renderSize, r * renderSize + bottomOffset);
+                basicEnemy->setPlayer(player);
                 scene->addItem(basicEnemy);
                 enemies.append(basicEnemy);
                 continue;
@@ -621,6 +625,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
             savedLevelNum = currentLevelNum;
             savedCheckpointPos = lastCheckpointPos;
             savedForm = player->currentForm;
+            savedAbilities = player->collectedAbilities;
             savedHP = player->hp;
             savedStamina = player->stamina;
             savedAttackPowerTimer = player->attackPowerTimer;
@@ -911,16 +916,18 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
         proj->damage = 50;
         bool isBossMode = (dukeFishron || brainOfCthulhu || iceGod);
         double speed = 16.0;
-        proj->setPixmap(QPixmap(":/tu/star.png").scaled(32, 32, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+        QPixmap starPix = QPixmap(":/tu/star.png").scaled(32, 32, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         if (isBossMode) {
             proj->vx = std::cos(shootAngle) * speed;
             proj->vy = std::sin(shootAngle) * speed;
             proj->setPos(player->x() + 24 - 16, player->y() + 36 - 16);
         } else {
             proj->vx = player->facingRight ? speed : -speed;
+            if (!player->facingRight) starPix = starPix.transformed(QTransform().scale(-1, 1));
             proj->setPos(player->facingRight ? player->x() + 48 : player->x() - 24,
                          player->y() + 12);
         }
+        proj->setPixmap(starPix);
         scene->addItem(proj);
         projectiles.append(proj);
     }
@@ -933,6 +940,34 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
         // 2. 如果已拥有形态能力，启动长按计时器（需按住1秒才取消，防误触）
         else if (!player->isFatty && player->currentForm != Enemy::NONE && player->formCancelTimer == 0) {
             player->formCancelTimer = 1;
+        }
+    }
+    // ====== R键切换已收集的能力 ======
+    else if (event->key() == Qt::Key_R && !event->isAutoRepeat()) {
+        if (currentState == PLAYING &&
+            !player->isDigesting && !player->isSwallowing && !player->isSpitting &&
+            !player->isRolling && !player->isAttacking && !player->isFireSprinting &&
+            !player->isExploding && !player->isIceDefending && !player->isLeafSkill &&
+            !player->isLightningDashing && !player->isLightningFlying &&
+            !player->collectedAbilities.isEmpty()) {
+
+            // 找到当前形态在收集池中的位置
+            int curIdx = player->collectedAbilities.indexOf(player->currentForm);
+            int nextIdx = 0;
+            if (curIdx >= 0 && curIdx < player->collectedAbilities.size() - 1) {
+                nextIdx = curIdx + 1;
+            }
+            // 如果当前形态不在池中（NONE或已移除），从第一个开始
+
+            Enemy::CopyAbility nextForm = player->collectedAbilities[nextIdx];
+            // 安全关闭当前形态专属技能
+            player->isIceDefending = false;
+            player->isFireSprinting = false;
+            player->isLightningDashing = false;
+            player->isLightningFlying = false;
+            player->isLeafSkill = false;
+            player->currentForm = nextForm;
+            player->formTimer = 1200; // 20秒
         }
     }
     // ====== J键长按：冰形态专属防御 ======
@@ -1114,6 +1149,7 @@ void MainWindow::gameUpdate() {
             player->hp = savedHP;
             player->stamina = savedStamina;
             player->currentForm = savedForm;
+            player->collectedAbilities = savedAbilities;
             player->attackPowerTimer = savedAttackPowerTimer;
             player->invulnTimer = 90;
             lastCheckpointPos = savedCheckpointPos;
@@ -1171,6 +1207,8 @@ void MainWindow::gameUpdate() {
                 bossSpawned = false;      // 允许入场动画重新触发
                 bossIntroActive = false;
                 bossIntroTimer = 0;
+                if (bossIntroOverlay) { scene->removeItem(bossIntroOverlay); delete bossIntroOverlay; bossIntroOverlay = nullptr; }
+                if (bossIntroExclamation) { scene->removeItem(bossIntroExclamation); delete bossIntroExclamation; bossIntroExclamation = nullptr; }
                 // 清理残留弹幕
                 for (auto* p : projectiles) { scene->removeItem(p); delete p; }
                 projectiles.clear();
@@ -1782,6 +1820,7 @@ void MainWindow::gameUpdate() {
     player->isHovering = (keys.contains(Qt::Key_W) || keys.contains(Qt::Key_Up))
                          && !player->isRolling;  // 翻滚时禁止漂浮
     player->updateLogic();
+
     view->centerOn(player);
 
     // ====== 浮动文字触发与更新 ======
@@ -1840,6 +1879,7 @@ void MainWindow::gameUpdate() {
             // 3. 垂直移动与地面碰撞（先垂直后水平，防止地面误判为墙壁导致抖动）
             enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
             QRectF eRect = enemy->sceneBoundingRect();
+            bool enemyOnGround = false;
             { QRectF ez = eRect.adjusted(-100,-100,100,50);
                 for (Tile *tile : floors) {
                     if (!tile->sceneBoundingRect().intersects(ez)) continue;
@@ -1848,6 +1888,28 @@ void MainWindow::gameUpdate() {
                         if (enemy->vy > 0) { // 往下掉时踩到地板
                             enemy->setPos(enemy->x(), tRect.top() - eRect.height());
                             enemy->vy = 0; // 落地速度清零
+                            enemyOnGround = true;
+                        } else if (enemy->vy < 0) { // 往上跳撞到天花板
+                            enemy->setPos(enemy->x(), tRect.bottom());
+                            enemy->vy = 0;
+                        }
+                        break;
+                    }
+                }
+            }
+            // 水中物理：没站在实心地板上时检测水交互
+            if (!enemyOnGround) {
+                QRectF ez = eRect.adjusted(-100,-100,100,50);
+                for (Tile *tile : waters) {
+                    if (!tile->sceneBoundingRect().intersects(ez)) continue;
+                    if (enemy->collidesWithItem(tile)) {
+                        if (tile->tileType() == Tile::WaterSurface) {
+                            if (enemy->vy > 0) {
+                                enemy->setPos(enemy->x(), tile->sceneBoundingRect().top() - eRect.height());
+                                enemy->vy = 0;
+                            }
+                        } else {
+                            if (enemy->vy > 1.5) enemy->vy = 1.5;
                         }
                         break;
                     }
@@ -1891,6 +1953,16 @@ void MainWindow::gameUpdate() {
                             break;
                         }
                     }
+                    if (!hasFloorAhead) {
+                        for (Tile *tile : waters) {
+                            if (tile->tileType() != Tile::WaterSurface) continue;
+                            if (!tile->sceneBoundingRect().intersects(cz)) continue;
+                            if (tile->sceneBoundingRect().contains(checkPoint)) {
+                                hasFloorAhead = true;
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // 如果前方没有地面，到边缘掉头
@@ -1903,6 +1975,18 @@ void MainWindow::gameUpdate() {
             // Boss无视地形，直接应用速度
             enemy->setPos(enemy->x() + enemy->vx, enemy->y());
             enemy->setPos(enemy->x(), enemy->y() + enemy->vy);
+        }
+    }
+    // ====== 收集小怪攻击弹幕 ======
+    for (Enemy* enemy : enemies) {
+        if (enemy->isDead) continue;
+        MinionEnemy* minion = dynamic_cast<MinionEnemy*>(enemy);
+        if (minion && !minion->pendingProjectiles.isEmpty()) {
+            for (Projectile* p : minion->pendingProjectiles) {
+                scene->addItem(p);
+                projectiles.append(p);
+            }
+            minion->pendingProjectiles.clear();
         }
     }
     // ====== 相机边界限位与背景固定逻辑 ======
@@ -1936,6 +2020,14 @@ void MainWindow::gameUpdate() {
         // 使用随机数让相机在中心点周围 ±8 像素剧烈抖动
         renderX += (rand() % 17) - 8;
         renderY += (rand() % 17) - 8;
+    }
+
+    // 玩家受击屏幕震动
+    if (screenShakeTimer > 0) {
+        screenShakeTimer--;
+        int intensity = 6;
+        renderX += (rand() % (intensity * 2 + 1)) - intensity;
+        renderY += (rand() % (intensity * 2 + 1)) - intensity;
     }
 
     // Boss登场屏幕震荡（必须在 centerOn 之前修改 renderX/renderY）
@@ -2035,19 +2127,19 @@ void MainWindow::gameUpdate() {
                 Enemy::CopyAbility abil = abilities[idx];
                 QString path;
                 int frames = 6;
-                double spd = 1.5, sc = 0.6;
+                double spd = 1.5, visualScale = 0.6;
                 switch (abil) {
-                case Enemy::FIRE:  path=":/tu/fire_enemy.png"; frames=5; spd=1.5; sc=2.0; break;
-                case Enemy::ICE:   path=":/tu/Ice_Dude.png"; frames=6; spd=1.2; sc=0.6; break;
-                case Enemy::LEAF:  path=":/tu/Leaf_Dude.png"; frames=8; spd=1.0; sc=0.6; break;
-                case Enemy::SPARK: path=":/tu/Lightning_Dude.png"; frames=6; spd=1.8; sc=0.6; break;
+                case Enemy::FIRE:  path=":/tu/fire_enemy.png"; frames=5; spd=1.5; visualScale=2.0; break;
+                case Enemy::ICE:   path=":/tu/Ice_Dude.png"; frames=6; spd=1.2; visualScale=0.6; break;
+                case Enemy::LEAF:  path=":/tu/Leaf_Dude.png"; frames=8; spd=1.0; visualScale=0.6; break;
+                case Enemy::SPARK: path=":/tu/Lightning_Dude.png"; frames=6; spd=1.8; visualScale=0.6; break;
                 default: path=":/tu/Ice_Dude.png"; break;
                 }
                 bool left = rand() % 2 == 0;
                 qreal sx = left ? (cameraX - halfViewW + 24) : (cameraX + halfViewW - 24);
-                MinionEnemy* m = new MinionEnemy(path, frames, spd, abil);
-                m->setScale(sc);
+                MinionEnemy* m = new MinionEnemy(path, frames, spd, abil, visualScale);
                 m->setPatrolDuration(999999); // 禁用巡逻转向，仅靠悬崖检测
+                m->setPlayer(player);
                 m->setPos(sx, 0);
                 scene->addItem(m);
                 enemies.append(m);
@@ -2080,26 +2172,14 @@ void MainWindow::gameUpdate() {
         }
     }
 
-    // ====== 360度瞄准点更新（Boss模式专用）======
+    // ====== Boss模式角度更新（Q/E键旋转瞄准方向）======
     {
         bool isBossMode = (dukeFishron || brainOfCthulhu || iceGod);
-        if (aimDot && player && isBossMode && selectedWeapon == WEAPON_BULLET) {
-            // Q键逆时针旋转，E键顺时针旋转（每帧3度）
+        if (player && isBossMode && selectedWeapon == WEAPON_BULLET) {
             if (keys.contains(Qt::Key_Comma)) shootAngle -= 0.052;
             if (keys.contains(Qt::Key_Period)) shootAngle += 0.052;
-            // 角度归一化到 [0, 2π)
             if (shootAngle < 0) shootAngle += 2 * M_PI;
             if (shootAngle >= 2 * M_PI) shootAngle -= 2 * M_PI;
-
-            // 将圆点放在卡比中心周围半径40px处
-            double cx = player->x() + 24;
-            double cy = player->y() + 36;
-            double radius = 30.0;
-            aimDot->setPos(cx + std::cos(shootAngle) * radius - 5,
-                           cy + std::sin(shootAngle) * radius - 5);
-            aimDot->setVisible(true);
-        } else if (aimDot) {
-            aimDot->setVisible(false);
         }
     }
 
@@ -2161,16 +2241,16 @@ void MainWindow::gameUpdate() {
             QString spritePath;
             int frames = 6;
             double speed = 1.5;
-            double scale = 0.6;
+            double visualScale = 0.6;
             switch (ability) {
             case Enemy::FIRE:
-                spritePath = ":/tu/fire_enemy.png"; frames = 5; speed = 1.5; scale = 2.0; break;
+                spritePath = ":/tu/fire_enemy.png"; frames = 5; speed = 1.5; visualScale = 2.0; break;
             case Enemy::ICE:
-                spritePath = ":/tu/Ice_Dude.png";  frames = 6; speed = 1.2; scale = 0.6; break;
+                spritePath = ":/tu/Ice_Dude.png";  frames = 6; speed = 1.2; visualScale = 0.6; break;
             case Enemy::LEAF:
-                spritePath = ":/tu/Leaf_Dude.png"; frames = 8; speed = 1.0; scale = 0.6; break;
+                spritePath = ":/tu/Leaf_Dude.png"; frames = 8; speed = 1.0; visualScale = 0.6; break;
             case Enemy::SPARK:
-                spritePath = ":/tu/Lightning_Dude.png"; frames = 6; speed = 1.8; scale = 0.6; break;
+                spritePath = ":/tu/Lightning_Dude.png"; frames = 6; speed = 1.8; visualScale = 0.6; break;
             default:
                 spritePath = ":/tu/Ice_Dude.png"; break;
             }
@@ -2180,10 +2260,10 @@ void MainWindow::gameUpdate() {
             qreal spawnX = spawnLeft ? (cameraX - halfViewW + 24) : (cameraX + halfViewW - 24);
 
             // 先创建小怪并加到场景，获取其碰撞高度
-            MinionEnemy* minion = new MinionEnemy(spritePath, frames, speed, ability);
-            minion->setScale(scale);
+            MinionEnemy* minion = new MinionEnemy(spritePath, frames, speed, ability, visualScale);
             minion->setPatrolDuration(999999); // 禁用巡逻转向
             minion->reversesOnCollision = false; // 取消撞墙/悬崖回头，防止抖动
+            minion->setPlayer(player);
             minion->setPos(spawnX, 0);
             scene->addItem(minion);
             enemies.append(minion);
@@ -2381,6 +2461,9 @@ void MainWindow::gameUpdate() {
 
                 // 敌人死亡
                 if (enemy->isDead) {
+                    if (enemy == dukeFishron) dukeFishron = nullptr;
+                    else if (enemy == brainOfCthulhu) brainOfCthulhu = nullptr;
+                    else if (enemy == iceGod) iceGod = nullptr;
                     scene->removeItem(enemy);
                     enemies.removeAt(j);
                     delete enemy;
@@ -2417,7 +2500,7 @@ void MainWindow::gameUpdate() {
         if (proj->hurtsPlayer && player->invulnTimer == 0 && player->hp > 0) {
             if (proj->collidesWithItem(player)) {
                 hitPlayer = true;
-                if (!player->isRolling && !player->isIceDefending && !player->isExploding) {
+                if (!player->isRolling && !player->isIceDefending && !player->isExploding && !player->isFireSprinting) {
                     bool bm = (dukeFishron || brainOfCthulhu || iceGod);
                     player->hp -= bm ? proj->damage : 1;
                     // 扣血音效
@@ -2426,6 +2509,11 @@ void MainWindow::gameUpdate() {
                     sfxPlayer->play();
                     player->invulnTimer = 90;
                     player->vy = -4;
+                    // 伤害反馈：红闪 + 屏幕震动 + 水平击退
+                    player->damageFlashTimer = 8;
+                    screenShakeTimer = 8;
+                    double knockbackDir = (player->x() < proj->x()) ? -1.0 : 1.0;
+                    player->vx = knockbackDir * 6.0;
                     if (proj->causesSlow) {
                         player->applySlow(500); // 8000ms / 16ms = 500帧 (即8秒)
                     }
@@ -2462,7 +2550,7 @@ void MainWindow::gameUpdate() {
             if (player->sceneBoundingRect().intersects(spikeHitbox)) {
 
                 // 技能免伤保护
-                if (player->isRolling || player->isIceDefending || player->isExploding) {
+                if (player->isRolling || player->isIceDefending || player->isExploding || player->isFireSprinting) {
                     continue;
                 }
 
@@ -2474,6 +2562,9 @@ void MainWindow::gameUpdate() {
                 sfxPlayer->play();
                 player->invulnTimer = 90;
                 player->vy = -6; // 受击向上弹
+                // 伤害反馈
+                player->damageFlashTimer = 8;
+                screenShakeTimer = 8;
 
                 // 根据速度方向反向弹飞（防卡墙）
                 {
@@ -2522,6 +2613,9 @@ void MainWindow::gameUpdate() {
 
                         enemy->takeDamage(2); // 爆炸对敌人造成2点伤害
                         if (enemy->isDead) {
+                            if (enemy == dukeFishron) dukeFishron = nullptr;
+                            else if (enemy == brainOfCthulhu) brainOfCthulhu = nullptr;
+                            else if (enemy == iceGod) iceGod = nullptr;
                             scene->removeItem(enemy);
                             enemies.removeAt(j);
                             delete enemy;
@@ -2537,6 +2631,11 @@ void MainWindow::gameUpdate() {
                     sfxPlayer->play();
                     player->invulnTimer = 90;
                     player->vy = -6;
+                    // 伤害反馈：红闪 + 屏幕震动 + 水平击退
+                    player->damageFlashTimer = 8;
+                    screenShakeTimer = 8;
+                    double knockbackDir = (player->x() < enemy->x()) ? -1.0 : 1.0;
+                    player->vx = knockbackDir * 7.0;
                     break; // 单帧内只承受一次伤害
                 }
             }
@@ -2700,6 +2799,9 @@ void MainWindow::gameUpdate() {
                 if (swallowEatRect.intersects(enemyRect)) {
                     player->swallowedAbility = enemy->ability;
                     enemy->isDead = true;
+                    if (enemy == dukeFishron) dukeFishron = nullptr;
+                    else if (enemy == brainOfCthulhu) brainOfCthulhu = nullptr;
+                    else if (enemy == iceGod) iceGod = nullptr;
                     scene->removeItem(enemy);
                     enemies.removeAt(j);
                     delete enemy;
@@ -2863,16 +2965,29 @@ void MainWindow::gameUpdate() {
                     break;
                 }
             }
+            if (!isResting) {
+                for (Tile* tile : waters) {
+                    if (tile->tileType() != Tile::WaterSurface) continue;
+                    if (tile->sceneBoundingRect().contains(footPoint)) {
+                        isResting = true;
+                        break;
+                    }
+                }
+            }
         }
 
-        // 1. 应用重力（仅当未停在地面时）
+        // 1. 应用重力 + 水平摩擦力（仅当未停在地面时）
         if (!isResting) {
             star->vy += 0.8;
             if (star->vy > 15) star->vy = 15;
+            star->vx *= 0.96; // 水平摩擦力
+            if (qAbs(star->vx) < 0.2) star->vx = 0;
+        } else {
+            star->vx = 0; // 停在地面时水平速度归零
         }
 
-        // 2. 垂直位移
-        star->setPos(star->x(), star->y() + star->vy);
+        // 2. 水平+垂直位移
+        star->setPos(star->x() + star->vx, star->y() + star->vy);
 
         // 3. 地板碰撞
         QRectF sRect = star->sceneBoundingRect();
@@ -2884,41 +2999,75 @@ void MainWindow::gameUpdate() {
                     if (star->vy > 0) {
                         star->setPos(star->x(), tRect.top() - sRect.height());
                         star->vy = 0;
+                        star->vx = 0;
                     }
                     break;
                 }
             }
         }
     }
-    // ====== 星星触碰获得（无需吞噬，碰到就自动收集） ======
+    // ====== 星星触碰处理（坠落中碰到卡比会弹开，地上的星星触碰收集） ======
     if (player && player->hp > 0) {
         QRectF pRect = player->sceneBoundingRect().adjusted(4, 4, -4, -4);
         for (int k = stars.size() - 1; k >= 0; k--) {
-            if (pRect.intersects(stars[k]->sceneBoundingRect())) {
-                player->starAttackStock++;
-                Star* collected = stars[k];
-                scene->removeItem(collected);
-                stars.removeAt(k);
-                delete collected;
+            Star* star = stars[k];
+            QRectF sRect = star->sceneBoundingRect();
+            if (pRect.intersects(sRect)) {
+                // 只有落地静止的星星才能收集（vy == 0 表示已停在地面）
+                if (star->vy == 0) {
+                    player->starAttackStock++;
+                    scene->removeItem(star);
+                    stars.removeAt(k);
+                    delete star;
+                } else {
+                    // 运动中的星星碰到卡比：弹飞
+                    star->vy = -6.0;
+                    double starCX = sRect.center().x();
+                    double playerCX = pRect.center().x();
+                    star->vx = (starCX > playerCX) ? 4.0 : -4.0;
+                }
                 break;
             }
         }
     }
-    // ====== 木箱物理（重力 + 地面碰撞） ======
+    // ====== 木箱物理（重力 + 地面碰撞 + 水交互） ======
     for (Crate* crate : crates) {
         crate->vy += 0.8;
         if (crate->vy > 15) crate->vy = 15;
         crate->setPos(crate->x(), crate->y() + crate->vy);
 
         QRectF crateRect = crate->sceneBoundingRect();
-        { QRectF crateZ = crateRect.adjusted(-10,-10,10,10);
-            for (Tile* tile : floors) {
+        QRectF crateZ = crateRect.adjusted(-10, -10, 10, 10);
+        bool crateOnGround = false;
+
+        // 1. 优先检查实心地面碰撞
+        for (Tile* tile : floors) {
+            if (!tile->sceneBoundingRect().intersects(crateZ)) continue;
+            if (crate->collidesWithItem(tile)) {
+                QRectF tileRect = tile->sceneBoundingRect();
+                if (crate->vy > 0) {
+                    crate->setPos(crate->x(), tileRect.top() - crateRect.height());
+                    crate->vy = 0;
+                    crateOnGround = true;
+                }
+                break;
+            }
+        }
+
+        // 2. 水中物理：没站在实心地板上时检测水交互
+        if (!crateOnGround) {
+            for (Tile* tile : waters) {
                 if (!tile->sceneBoundingRect().intersects(crateZ)) continue;
                 if (crate->collidesWithItem(tile)) {
-                    QRectF tileRect = tile->sceneBoundingRect();
-                    if (crate->vy > 0) {
-                        crate->setPos(crate->x(), tileRect.top() - crateRect.height());
-                        crate->vy = 0;
+                    if (tile->tileType() == Tile::WaterSurface) {
+                        // 水面：箱子浮在水面上，不下沉
+                        if (crate->vy > 0) {
+                            crate->setPos(crate->x(), tile->sceneBoundingRect().top() - crateRect.height());
+                            crate->vy = 0;
+                        }
+                    } else {
+                        // 水体中：箱子受浮力，缓慢下沉（vy最大1.0）
+                        if (crate->vy > 1.0) crate->vy = 1.0;
                     }
                     break;
                 }
@@ -3035,6 +3184,15 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     };
 
     if (obj == view) {
+        // 拦截方向键的KeyPress事件，阻止QGraphicsView默认的箭头键滚动行为
+        if (event->type() == QEvent::KeyPress) {
+            QKeyEvent* ke = static_cast<QKeyEvent*>(event);
+            int k = ke->key();
+            if (k == Qt::Key_Left || k == Qt::Key_Right ||
+                k == Qt::Key_Up   || k == Qt::Key_Down) {
+                return true; // 阻止事件传递给view，避免画面异常滚动
+            }
+        }
         if (event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease) {
             QMouseEvent* me = static_cast<QMouseEvent*>(event);
             QPointF scenePos = view->mapToScene(me->pos());

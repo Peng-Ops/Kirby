@@ -324,7 +324,13 @@ void Player::updateLogic() {
             }
         }
     }
-    if (slowTimer > 0) {
+    // 受伤红闪效果（优先级最高，覆盖其他颜色效果）
+    if (damageFlashTimer > 0) {
+        damageFlashTimer--;
+        QGraphicsColorizeEffect *redEffect = new QGraphicsColorizeEffect();
+        redEffect->setColor(QColor(255, 60, 40));
+        this->setGraphicsEffect(redEffect);
+    } else if (slowTimer > 0) {
         slowTimer--;
         isSlowed = (slowTimer > 0);
         QGraphicsColorizeEffect *iceEffect = new QGraphicsColorizeEffect();
@@ -514,6 +520,13 @@ void Player::updateLogic() {
             if (currentFrame >= digestFrames.size()) {
                 isDigesting = false;
                 currentForm = swallowedAbility; // 核心：正式继承肚子里的怪物能力！
+                // 将能力加入收集池（最多保留2个，不重复）
+                if (swallowedAbility != Enemy::NONE && !collectedAbilities.contains(swallowedAbility)) {
+                    if (collectedAbilities.size() >= 2) {
+                        collectedAbilities.removeFirst(); // 移除最旧的
+                    }
+                    collectedAbilities.append(swallowedAbility);
+                }
                 swallowedAbility = Enemy::NONE; // 消化干净，清空胃部
                 formTimer = 1200;
                 setState(isOnGround ? IDLE : JUMPING);

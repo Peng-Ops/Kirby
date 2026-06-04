@@ -105,11 +105,11 @@ void BrainOfCthulhu::pickNewTarget() {
     targetX = player->x() + offsetX;
     // 限制Y在玩家上下250px内（保持在屏幕可见范围）
     targetY = player->y() + (rand() % 500 - 250);
-    // 边界钳制
+    // 边界钳制——限制Y在屏幕可见范围内
     if (targetX < frameSize) targetX = frameSize;
     if (targetX > sceneW - frameSize) targetX = sceneW - frameSize;
-    if (targetY < frameSize) targetY = frameSize;
-    if (targetY > sceneH - frameSize - 100) targetY = sceneH - frameSize - 100;
+    if (targetY < 350) targetY = 350;
+    if (targetY > 900) targetY = 900;
 }
 
 void BrainOfCthulhu::updateLogic() {
@@ -163,11 +163,11 @@ void BrainOfCthulhu::updateLogic() {
                 setFrame(curFrames[currentFrame], vx < 0);
         }
 
-        // 边界
+        // 边界——限制在屏幕可见范围
         if (this->x() < 0) { this->setPos(0, this->y()); vx *= -1; }
         if (this->x() > sceneW - frameSize) { this->setPos(sceneW - frameSize, this->y()); vx *= -1; }
-        if (this->y() < 0) { this->setPos(this->x(), 0); vy *= -1; }
-        if (this->y() > sceneH - frameSize) { this->setPos(this->x(), sceneH - frameSize); vy *= -1; }
+        if (this->y() < 200) { this->setPos(this->x(), 200); vy *= -1; }
+        if (this->y() > 1050) { this->setPos(this->x(), 1050); vy *= -1; }
 
         flyTimer++;
         if (flyTimer >= flyDuration) {
@@ -267,7 +267,7 @@ void BrainOfCthulhu::updateLogic() {
                 double tx = player->x() + std::cos(angle) * dist;
                 double ty = player->y() + std::sin(angle) * dist;
                 tx = std::max((double)frameSize, std::min(tx, sceneW - frameSize));
-                ty = std::max((double)frameSize, std::min(ty, sceneH - frameSize));
+                ty = std::max(350.0, std::min(ty, 900.0));
                 setPos(tx, ty);
             }
         }

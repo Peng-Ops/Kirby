@@ -98,9 +98,80 @@ void DukeFishron::pickNewTarget() {
     if (!player) return;
     double offsetX = (rand() % 300 + 200) * (rand() % 2 == 0 ? 1 : -1);
     targetX = player->x() + offsetX;
-    targetY = (double)(rand() % ((int)sceneH - frameSize));
+    // 限制Y在屏幕可见范围 [350, 900]
+    targetY = (double)(350 + rand() % 550);
     if (targetX < 0) targetX = 0;
     if (targetX > sceneW - frameSize) targetX = sceneW - frameSize;
+    if (targetY < 350) targetY = 350;
+    if (targetY > 900) targetY = 900;
+}
+
+void DukeFishron::convertRandomTilesToWater(int consecutiveCount) {
+    if (!scene()) return;
+
+    // 收集场景中所有可转换的固体地面Tile
+    QList<QGraphicsItem*> items = scene()->items();
+    QList<Tile*> allCandidates;
+    for (QGraphicsItem* item : items) {
+        Tile* tile = dynamic_cast<Tile*>(item);
+        if (!tile) continue;
+        Tile::TileType type = tile->tileType();
+        if (type == Tile::Grass || type == Tile::Dirt ||
+            type == Tile::IceBlock || type == Tile::RubbleBlock) {
+            // 排除已在pending或active中的
+            bool alreadyChanging = false;
+            for (Tile* pt : pendingWaterConversions) {
+                if (pt == tile) { alreadyChanging = true; break; }
+            }
+            if (!alreadyChanging) {
+                for (auto& wc : activeWaterChanges) {
+                    if (wc.tile == tile) { alreadyChanging = true; break; }
+                }
+            }
+            if (!alreadyChanging) {
+                allCandidates.append(tile);
+            }
+        }
+    }
+
+    // 只取地表方块（上方没有其他固体方块的）
+    QList<Tile*> solidTiles;
+    qreal tileH = 48.0; // 标准方块高度
+    for (Tile* tile : allCandidates) {
+        bool hasTileAbove = false;
+        qreal aboveY = tile->y() - tileH;
+        for (Tile* other : allCandidates) {
+            if (other == tile) continue;
+            if (std::abs(other->x() - tile->x()) < 4.0 &&
+                std::abs(other->y() - aboveY) < 4.0) {
+                hasTileAbove = true;
+                break;
+            }
+        }
+        if (!hasTileAbove) {
+            solidTiles.append(tile);
+        }
+    }
+
+    if (solidTiles.isEmpty()) return;
+
+    int startIdx = rand() % solidTiles.size();
+    Tile* startTile = solidTiles[startIdx];
+    qreal startX = startTile->x();
+    qreal tileW = startTile->sceneBoundingRect().width();
+    if (tileW <= 0) tileW = 48;
+
+    pendingWaterConversions.append(startTile);
+
+    for (int i = 1; i < consecutiveCount; i++) {
+        qreal expectedX = startX + i * tileW;
+        for (Tile* t : solidTiles) {
+            if (std::abs(t->x() - expectedX) < 4.0) {
+                pendingWaterConversions.append(t);
+                break;
+            }
+        }
+    }
 }
 
 void DukeFishron::convertRandomTilesToWater(int consecutiveCount) {
@@ -383,11 +454,11 @@ void DukeFishron::updateLogic() {
                 setFrame(allFrames[currentFrame], vx < 0);
         }
 
-        // 边界约束
+        // 边界约束——限制在屏幕可见范围
         if (this->x() < 0) { this->setPos(0, this->y()); vx *= -1; }
         if (this->x() > sceneW - frameSize) { this->setPos(sceneW - frameSize, this->y()); vx *= -1; }
-        if (this->y() < 50) { this->setPos(this->x(), 0); vy *= -1; }
-        if (this->y() > sceneH - frameSize - 50) { this->setPos(this->x(), sceneH - frameSize); vy *= -1; }
+        if (this->y() < 200) { this->setPos(this->x(), 200); vy *= -1; }
+        if (this->y() > 1050) { this->setPos(this->x(), 1050); vy *= -1; }
 
         flyTimer++;
         if (flyTimer >= flyDuration) {

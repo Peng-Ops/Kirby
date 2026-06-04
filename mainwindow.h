@@ -106,6 +106,7 @@ private:
     bool prevExploding = false;     // 爆炸音效边缘检测
     bool cratePushSoundPlayed = false; // 木箱推动音效每帧只播一次
     int aiTimer = 0;
+    int screenShakeTimer = 0;
     QProgressBar* staminaBar; // 新增体力条指针
     QGraphicsPixmapItem* swordItem    = nullptr;
     int  swordSwingTimer               = 0;
@@ -230,13 +231,13 @@ private:
     int savedLevelNum = 0;
     QPointF savedCheckpointPos;
     Enemy::CopyAbility savedForm = Enemy::NONE;
+    QList<Enemy::CopyAbility> savedAbilities;
     int savedHP = 3;
     int savedStamina = 300;
     int savedAttackPowerTimer = 0;
 
     // ====== 360度瞄准系统（Boss模式专用）======
     double shootAngle = 0.0;
-    QGraphicsEllipseItem* aimDot = nullptr;
 
     // ====== Boss动态生成 ======
     int pendingBossType = 0;    // 0=无, 1=克苏鲁, 2=猪鲨, 3=冰雪
