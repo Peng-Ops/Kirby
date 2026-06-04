@@ -24,6 +24,7 @@
 #include "brainofcthulhu.h"
 #include "icegod.h"
 #include "star.h"
+#include "badge.h"
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -51,9 +52,7 @@ private slots:
 
 private:
     QList<QGraphicsPixmapItem*> lifeIcons; // 存放生命值图标的列表
-    QGraphicsRectItem* playerHpBarBg = nullptr;
-    QGraphicsRectItem* playerHpBarFg = nullptr;
-    int playerMaxHp = 3;
+    int playerMaxHp = 5;
     Ui::MainWindow *ui;
     QGraphicsScene *scene;
     QGraphicsView *view;
@@ -72,8 +71,9 @@ private:
     DukeFishron* dukeFishron = nullptr;        // 猪鲨Boss
     BrainOfCthulhu* brainOfCthulhu = nullptr;  // 克苏鲁之脑Boss
     IceGod* iceGod = nullptr;                  // 冰雪之神Boss
-    QGraphicsRectItem* bossHpBarBg = nullptr;  // Boss血条背景
-    QGraphicsRectItem* bossHpBarFg = nullptr;  // Boss血条前景
+    QGraphicsPixmapItem* bossHpBarFrame = nullptr;  // Boss血条外框 (Outer_Lower)
+    QGraphicsRectItem* bossHpBarFill = nullptr;      // Boss血条红色填充
+    QPixmap bossHpBarFramePixmap;                    // Outer_Lower贴图缓存
     QGraphicsTextItem* cooldownText = nullptr;   // 技能冷却HUD（右下角）
     QGraphicsPixmapItem* fireCdIcon = nullptr;    // 火形态冷却图标
     QGraphicsPixmapItem* iceCdIcon = nullptr;     // 冰形态冷却图标
@@ -107,11 +107,9 @@ private:
     bool cratePushSoundPlayed = false; // 木箱推动音效每帧只播一次
     int aiTimer = 0;
     int screenShakeTimer = 0;
+    qreal actualCameraX = 500.0;    // 当前实际相机X（已做边界钳制）
+    qreal actualCameraY = 350.0;    // 当前实际相机Y
     QProgressBar* staminaBar; // 新增体力条指针
-    QGraphicsPixmapItem* swordItem    = nullptr;
-    int  swordSwingTimer               = 0;
-    bool isSwordSwinging               = false;
-    QSet<Enemy*> swordHitEnemies;      // 单次挥剑已命中的敌人
 
     // ====== DukeFishron二阶段背景过渡 ======
     QList<QGraphicsRectItem*> phase2BgLayers;
@@ -132,9 +130,6 @@ private:
     void updateTutorialTexts();
     void cleanupTutorialTexts();
 
-    enum WeaponType { WEAPON_BULLET, WEAPON_SWORD };
-    WeaponType selectedWeapon = WEAPON_BULLET;
-    int pendingBossTypeTemp = 0;   // 武器选择期间暂存boss类型
 
     // ====== 游戏状态机枚举与控制变量 ======
     enum GameState { START_SCREEN, LevelSelect, INTRO_PAN, PLAYING, PAUSED, SETTINGS, MAIN_MENU, GAME_OVER, ENDING };
@@ -161,14 +156,16 @@ private:
     QGraphicsPixmapItem* mainMenuBg1 = nullptr;  // kaishidonghua 背景帧1
     QGraphicsTextItem* mainMenuTitle = nullptr;
     QList<QGraphicsRectItem*> mainMenuButtons;
+    QList<QGraphicsPixmapItem*> mainMenuBtnImages;
     QList<QGraphicsTextItem*> mainMenuBtnTexts;
     QList<QRectF> mainMenuBtnRects;
     int mainMenuBtnCount = 0;  // 实际按钮数（可能3或4，取决于是否有存档）
 
     // ====== 设置界面UI ======
-    QGraphicsRectItem* settingsOverlay = nullptr;
-    QGraphicsTextItem* settingsTitle = nullptr;
-    QList<QGraphicsRectItem*> settingsButtons;
+    QGraphicsPixmapItem* settingsPanel = nullptr;    // setting.png
+    QGraphicsPixmapItem* settingsBackBtn = nullptr;  // restart返回按钮
+    QRectF settingsBackRect;
+    QList<QGraphicsRectItem*> settingsButtons;       // 辅助清理
     QList<QGraphicsTextItem*> settingsBtnTexts;
     QList<QRectF> settingsBtnRects;
     QGraphicsRectItem* settingsVolBg = nullptr;
@@ -187,15 +184,6 @@ private:
     QList<QGraphicsTextItem*> categoryHeaders;
     int modeSelection = 0;     // 模式选择标记 (0=无, 1=冒险, 21=Boss1克苏鲁, 22=Boss2猪鲨, 23=Boss3冰雪)
 
-    bool isWeaponSelect = false;
-    QVector<QGraphicsRectItem*>    weaponCards;
-    QVector<QGraphicsTextItem*>    weaponCardLabels;
-    QVector<QGraphicsPixmapItem*>  weaponCardImages;
-    QVector<QRectF>                weaponCardRects;
-    QGraphicsTextItem*             weaponBackLabel = nullptr;
-    void showWeaponSelect();
-    void cleanupWeaponSelectUI();
-
     // ====== Boss选择子菜单 ======
     bool isBossSelect = false;
     QVector<QGraphicsRectItem*> bossCards;
@@ -209,8 +197,10 @@ private:
     // ====== 暂停菜单 ======
     QGraphicsRectItem* pauseOverlay = nullptr;
     QGraphicsTextItem* pauseTitle = nullptr;
+    QGraphicsPixmapItem* pausePanelBg = nullptr;  // 暂停面板背景(setting.png)
     QList<QGraphicsRectItem*> pauseButtons;
     QList<QGraphicsTextItem*> pauseButtonTexts;
+    QList<QGraphicsPixmapItem*> pauseBtnImages;
     QList<QRectF> pauseBtnRects;
     QGraphicsRectItem* volTrackBg = nullptr;
     QGraphicsRectItem* volTrackFg = nullptr;
@@ -220,10 +210,8 @@ private:
     double volumeLevel = 0.5;
 
     // ====== 游戏结束UI ======
-    QGraphicsRectItem* gameOverOverlay = nullptr;
-    QGraphicsTextItem* gameOverTitle = nullptr;
-    QList<QGraphicsRectItem*> gameOverButtons;
-    QList<QGraphicsTextItem*> gameOverButtonTexts;
+    QGraphicsPixmapItem* gameOverPanel = nullptr;   // 面板背景
+    QList<QGraphicsPixmapItem*> gameOverBtnImages;
     QList<QRectF> gameOverBtnRects;
 
     // ====== 存档状态 ======
@@ -247,6 +235,13 @@ private:
 
     // ====== Boss战小怪生成 ======
     int bossMinionSpawnTimer = 0;   // 每帧+1，满1800(30秒)生成一波
+    // Boss死亡白屏+徽章
+    QGraphicsRectItem* whiteOverlay = nullptr;  // 白屏遮罩
+    Badge* droppedBadge = nullptr;              // Boss掉落的徽章
+    int bossDeathGlobalPhase = 0;               // 0=无 1=闪烁 2=发光 3=白屏 4=等待拾取
+    int bossDeathGlobalTimer = 0;               // 死亡全局计时器
+    int dyingBossType = 0;                      // 1=克苏鲁之脑 2=猪鲨 3=冰雪女王
+    qreal dyingBossX = 0, dyingBossY = 0;       // Boss死亡位置(掉落徽章位置)
 
     // ====== Boss登场动画 ======
     int bossIntroTimer = 0;         // 帧计数器，0=未开始
@@ -280,8 +275,8 @@ private:
     QGraphicsPixmapItem* endingScreen = nullptr;
     QGraphicsRectItem* endingOverlay = nullptr;
     QGraphicsRectItem* endingBlackBg = nullptr;  // 结束动画黑底（需清理防止泄漏）
-    QGraphicsRectItem* endingMenuBtn = nullptr;
-    QGraphicsTextItem* endingMenuBtnText = nullptr;
+    QGraphicsPixmapItem* endingMenuBtn = nullptr;   // restart图标
+    QRectF endingMenuBtnRect;                        // 点击区域
     QVector<QPixmap> endingKirbyFrames;
     QVector<QPixmap> endingBigBirdFrames;
     QVector<QPixmap> endingSmallBirdFrames;

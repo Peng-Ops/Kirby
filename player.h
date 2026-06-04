@@ -23,7 +23,7 @@ public:
     static constexpr double rollSpeed = 8;         // 翻滚时的水平速度
 
     Player();
-    int hp = 3;           // 初始3点生命值
+    int hp = 5;           // 初始5点生命值
     int invulnTimer = 0;  // 受击无敌时间计时器
     void updateLogic() override;
     void setState(State newState);

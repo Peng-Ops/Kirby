@@ -84,12 +84,24 @@ QPainterPath BrainOfCthulhu::shape() const {
 }
 
 void BrainOfCthulhu::takeDamage(int dmg) {
+    if (state == DYING) return;
+
     Enemy::takeDamage(dmg);
-    if (!isDead && dmg > 0) {
+    if (isDead) {
+        isDead = false;
+        hp = 1;
+        isDying = true;
+        state = DYING;
+        deathTimer = 0;
+        vx = 0; vy = 0;
+        damage = 0;
+        setVisible(true);
+    }
+    if (!isDead && !isDying && dmg > 0) {
         invulnTimer = 8;
     }
     // 半血进入二阶段
-    if (!isPhase2 && hp <= fullHp / 2) {
+    if (!isPhase2 && hp <= fullHp / 2 && !isDying) {
         isPhase2 = true;
         state = PHASE2_TELEPORT;
         phase2Timer = 0;
@@ -114,6 +126,19 @@ void BrainOfCthulhu::pickNewTarget() {
 
 void BrainOfCthulhu::updateLogic() {
     if (isDead || !player) return;
+
+    // ====== 死亡动画 ======
+    if (state == DYING) {
+        deathTimer++;
+        if (deathTimer < 90) {
+            int interval = 8 - deathTimer / 11;
+            if (interval < 1) interval = 1;
+            setVisible((deathTimer / interval) % 2 == 0);
+        } else if (deathTimer < 120) {
+            setVisible(true);
+        }
+        return;
+    }
 
     // 受伤闪烁
     if (state != PHASE2_TELEPORT) {

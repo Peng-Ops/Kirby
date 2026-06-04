@@ -67,27 +67,39 @@ QPainterPath DukeFishron::shape() const {
 void DukeFishron::takeDamage(int dmg) {
     // 二阶段无敌
     if (state == PHASE_TWO) return;
+    // 死亡动画中不再受伤
+    if (state == DYING) return;
 
     Enemy::takeDamage(dmg);
-    if (!isDead && dmg > 0) {
+    if (isDead) {
+        // 进入死亡动画，不立即消失
+        isDead = false;
+        hp = 1;  // 保持血条显示
+        isDying = true;
+        state = DYING;
+        deathTimer = 0;
+        vx = 0;
+        vy = 0;
+        damage = 0;
+        setVisible(true);
+    }
+    if (!isDead && !isDying && dmg > 0) {
         invulnTimer = 8;
     }
 
     // 半血触发二阶段
-    if (!isPhase2 && hp <= fullHp / 2 && !isDead) {
+    if (!isPhase2 && hp <= fullHp / 2 && !isDying) {
         isPhase2 = true;
         state = PHASE_TRANSITION;
         phaseTransitionTimer = 0;
         vx = 0;
         vy = 0;
         damage = 0;
-        setVisible(true);   // 确保Boss可见，否则activeBoss检测失败会停止刷怪和血条
+        setVisible(true);
 
-        // 飞向屏幕中上方
         phase2TargetX = sceneW / 2.0 - frameSize / 2.0;
         phase2TargetY = -30.0;
 
-        // 切换到二阶贴图
         if (!phase2Frames.isEmpty()) {
             setFrame(phase2Frames[0], false);
         }
@@ -174,76 +186,24 @@ void DukeFishron::convertRandomTilesToWater(int consecutiveCount) {
     }
 }
 
-void DukeFishron::convertRandomTilesToWater(int consecutiveCount) {
-    if (!scene()) return;
-
-    // 收集场景中所有可转换的固体地面Tile
-    QList<QGraphicsItem*> items = scene()->items();
-    QList<Tile*> allCandidates;
-    for (QGraphicsItem* item : items) {
-        Tile* tile = dynamic_cast<Tile*>(item);
-        if (!tile) continue;
-        Tile::TileType type = tile->tileType();
-        if (type == Tile::Grass || type == Tile::Dirt ||
-            type == Tile::IceBlock || type == Tile::RubbleBlock) {
-            // 排除已在pending或active中的
-            bool alreadyChanging = false;
-            for (Tile* pt : pendingWaterConversions) {
-                if (pt == tile) { alreadyChanging = true; break; }
-            }
-            if (!alreadyChanging) {
-                for (auto& wc : activeWaterChanges) {
-                    if (wc.tile == tile) { alreadyChanging = true; break; }
-                }
-            }
-            if (!alreadyChanging) {
-                allCandidates.append(tile);
-            }
-        }
-    }
-
-    // 只取地表方块（上方没有其他固体方块的）
-    QList<Tile*> solidTiles;
-    qreal tileH = 48.0; // 标准方块高度
-    for (Tile* tile : allCandidates) {
-        bool hasTileAbove = false;
-        qreal aboveY = tile->y() - tileH;
-        for (Tile* other : allCandidates) {
-            if (other == tile) continue;
-            if (std::abs(other->x() - tile->x()) < 4.0 &&
-                std::abs(other->y() - aboveY) < 4.0) {
-                hasTileAbove = true;
-                break;
-            }
-        }
-        if (!hasTileAbove) {
-            solidTiles.append(tile);
-        }
-    }
-
-    if (solidTiles.isEmpty()) return;
-
-    int startIdx = rand() % solidTiles.size();
-    Tile* startTile = solidTiles[startIdx];
-    qreal startX = startTile->x();
-    qreal tileW = startTile->sceneBoundingRect().width();
-    if (tileW <= 0) tileW = 48;
-
-    pendingWaterConversions.append(startTile);
-
-    for (int i = 1; i < consecutiveCount; i++) {
-        qreal expectedX = startX + i * tileW;
-        for (Tile* t : solidTiles) {
-            if (std::abs(t->x() - expectedX) < 4.0) {
-                pendingWaterConversions.append(t);
-                break;
-            }
-        }
-    }
-}
-
 void DukeFishron::updateLogic() {
     if (isDead || !player) return;
+
+    // ====== 死亡动画 ======
+    if (state == DYING) {
+        deathTimer++;
+        if (deathTimer < 90) {
+            // 闪烁阶段：越闪越快
+            int interval = 8 - deathTimer / 11;
+            if (interval < 1) interval = 1;
+            setVisible((deathTimer / interval) % 2 == 0);
+        } else if (deathTimer < 120) {
+            // 发光阶段：保持可见，白色化
+            setVisible(true);
+        }
+        // 120帧后由主窗口处理白屏+掉落徽章
+        return;
+    }
 
     // ====== PHASE_TRANSITION: 飞向屏幕中上方（2秒无敌变身） ======
     if (state == PHASE_TRANSITION) {

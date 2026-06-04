@@ -76,25 +76,46 @@ QPainterPath IceGod::shape() const {
 }
 
 void IceGod::takeDamage(int dmg) {
+    if (state == DYING) return;
+
     int actualDmg = dmg;
     // 火形态伤害翻倍
     if (player && player->currentForm == Enemy::FIRE) {
         actualDmg *= 2;
     }
     Enemy::takeDamage(actualDmg);
+    if (isDead) {
+        isDead = false;
+        hp = 1;
+        isDying = true;
+        state = DYING;
+        deathTimer = 0;
+        vx = 0; vy = 0;
+        damage = 0;
+        setVisible(true);
+        // 清理所有雪花（标记死亡并隐藏）
+        for (Xuehua* x : xuehuas) {
+            x->isDead = true;
+            x->setVisible(false);
+        }
+        xuehuas.clear();
+        pendingXuehuas.clear();
+        pendingProjectiles.clear();
+    }
 
     // 检查召唤波次
-    int newWave = -1;
-    if (summonWave == 0 && hp <= fullHp * 2 / 3) {
-        newWave = 1;
-    } else if (summonWave <= 1 && hp <= fullHp * 1 / 3) {
-        newWave = 2;
-    }
-    if (newWave > summonWave) {
-        summonWave = newWave;
-        // 低血量召唤更多雪花
-        int count = (newWave == 1) ? 4 : 6;
-        summonXuehuas(count);
+    if (!isDying) {
+        int newWave = -1;
+        if (summonWave == 0 && hp <= fullHp * 2 / 3) {
+            newWave = 1;
+        } else if (summonWave <= 1 && hp <= fullHp * 1 / 3) {
+            newWave = 2;
+        }
+        if (newWave > summonWave) {
+            summonWave = newWave;
+            int count = (newWave == 1) ? 4 : 6;
+            summonXuehuas(count);
+        }
     }
 }
 
@@ -242,119 +263,6 @@ void IceGod::doIceRain() {
     }
 }
 
-// ====== 冰锥圆形扩散 ======
-void IceGod::doIceSpread() {
-    vx = 0;
-    vy = 0;
-    attackTimer++;
-    if (attackTimer % 25 == 0) {
-        int count = 8 + (summonWave >= 1 ? 4 : 0) + (summonWave >= 2 ? 4 : 0);
-        double baseAngle = attackTimer * 0.03; // 每轮旋转，形成螺旋效果
-        double speed = 3.0 + summonWave * 0.5;
-        for (int i = 0; i < count; i++) {
-            double angle = 2 * M_PI * i / count + baseAngle;
-            Projectile* p = new Projectile(
-                projectileFrames[0],
-                std::cos(angle) * speed,
-                std::sin(angle) * speed,
-                99999,     // 无限距离
-                20
-            );
-            p->hurtsEnemies = false;
-            p->hurtsPlayer = true;
-            p->ignoresWalls = true;
-            p->causesSlow = true;
-            p->setPos(this->x() + frameSize / 2.0 - 12,
-                      this->y() + frameSize / 2.0 - 18);
-            pendingProjectiles.append(p);
-        }
-        attackPhase++;
-    }
-    if (attackPhase >= 3) {
-        attackPhase = 0;
-        attackTimer = 0;
-        state = FLYING;
-        flyTimer = 0;
-    }
-}
-
-// ====== 瞄准冰束 ======
-void IceGod::doIceBeam() {
-    if (!player) { state = FLYING; flyTimer = 0; return; }
-    vx = 0;
-    vy = 0;
-    attackTimer++;
-    if (attackTimer % 12 == 0 && attackPhase < 6) {
-        double dx = player->x() - this->x();
-        double dy = player->y() - this->y();
-        double baseAngle = std::atan2(dy, dx);
-        int beamCount = 3 + summonWave; // 3~5条
-        double spread = 0.12;           // 散射角度
-        double speed = 5.0 + summonWave * 0.5;
-        for (int i = 0; i < beamCount; i++) {
-            double angle = baseAngle + (i - (beamCount - 1) / 2.0) * spread;
-            Projectile* p = new Projectile(
-                projectileFrames[0],
-                std::cos(angle) * speed,
-                std::sin(angle) * speed,
-                99999,     // 无限距离
-                20
-            );
-            p->hurtsEnemies = false;
-            p->hurtsPlayer = true;
-            p->ignoresWalls = true;
-            p->causesSlow = true;
-            p->setPos(this->x() + frameSize / 2.0 - 12,
-                      this->y() + frameSize / 2.0 - 18);
-            pendingProjectiles.append(p);
-        }
-        attackPhase++;
-    }
-    if (attackPhase >= 6 || attackTimer > 120) {
-        attackPhase = 0;
-        attackTimer = 0;
-        state = FLYING;
-        flyTimer = 0;
-    }
-}
-
-// ====== 冰锥雨 ======
-void IceGod::doIceRain() {
-    if (!player) { state = FLYING; flyTimer = 0; return; }
-    vx = 0;
-    vy = 0;
-    attackTimer++;
-    if (attackTimer % 8 == 0) {
-        // 在玩家周围随机位置生成冰锥
-        double spread = 300.0 + summonWave * 50;
-        double x = player->x() + (rand() % (int)spread) - spread / 2.0;
-        x = std::max(0.0, std::min(x, sceneW - 50.0));
-        Projectile* p = new Projectile(
-            projectileFrames[0],
-            (rand() % 100 - 50) * 0.02,    // 轻微水平偏移
-            3.0 + (rand() % 100) * 0.03,    // 下落速度
-            99999,                           // 无限距离
-            15
-        );
-        p->hasGravity = true;
-        p->hurtsEnemies = false;
-        p->hurtsPlayer = true;
-        p->ignoresWalls = true;
-        p->causesSlow = true;
-        p->setPos(x, this->y() - 50);
-        pendingProjectiles.append(p);
-        attackPhase++;
-    }
-    // 持续射出一定数量后结束
-    int maxPhase = 12 + summonWave * 4;
-    if (attackPhase >= maxPhase || attackTimer > 180) {
-        attackPhase = 0;
-        attackTimer = 0;
-        state = FLYING;
-        flyTimer = 0;
-    }
-}
-
 void IceGod::updateLogic() {
     if (isDead || !player) return;
 
@@ -363,6 +271,19 @@ void IceGod::updateLogic() {
         if (xuehuas[i]->isDead) {
             xuehuas.removeAt(i);
         }
+    }
+
+    // ====== 死亡动画 ======
+    if (state == DYING) {
+        deathTimer++;
+        if (deathTimer < 90) {
+            int interval = 8 - deathTimer / 11;
+            if (interval < 1) interval = 1;
+            setVisible((deathTimer / interval) % 2 == 0);
+        } else if (deathTimer < 120) {
+            setVisible(true);
+        }
+        return;
     }
 
     switch (state) {
