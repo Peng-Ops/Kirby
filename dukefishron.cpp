@@ -174,6 +174,74 @@ void DukeFishron::convertRandomTilesToWater(int consecutiveCount) {
     }
 }
 
+void DukeFishron::convertRandomTilesToWater(int consecutiveCount) {
+    if (!scene()) return;
+
+    // 收集场景中所有可转换的固体地面Tile
+    QList<QGraphicsItem*> items = scene()->items();
+    QList<Tile*> allCandidates;
+    for (QGraphicsItem* item : items) {
+        Tile* tile = dynamic_cast<Tile*>(item);
+        if (!tile) continue;
+        Tile::TileType type = tile->tileType();
+        if (type == Tile::Grass || type == Tile::Dirt ||
+            type == Tile::IceBlock || type == Tile::RubbleBlock) {
+            // 排除已在pending或active中的
+            bool alreadyChanging = false;
+            for (Tile* pt : pendingWaterConversions) {
+                if (pt == tile) { alreadyChanging = true; break; }
+            }
+            if (!alreadyChanging) {
+                for (auto& wc : activeWaterChanges) {
+                    if (wc.tile == tile) { alreadyChanging = true; break; }
+                }
+            }
+            if (!alreadyChanging) {
+                allCandidates.append(tile);
+            }
+        }
+    }
+
+    // 只取地表方块（上方没有其他固体方块的）
+    QList<Tile*> solidTiles;
+    qreal tileH = 48.0; // 标准方块高度
+    for (Tile* tile : allCandidates) {
+        bool hasTileAbove = false;
+        qreal aboveY = tile->y() - tileH;
+        for (Tile* other : allCandidates) {
+            if (other == tile) continue;
+            if (std::abs(other->x() - tile->x()) < 4.0 &&
+                std::abs(other->y() - aboveY) < 4.0) {
+                hasTileAbove = true;
+                break;
+            }
+        }
+        if (!hasTileAbove) {
+            solidTiles.append(tile);
+        }
+    }
+
+    if (solidTiles.isEmpty()) return;
+
+    int startIdx = rand() % solidTiles.size();
+    Tile* startTile = solidTiles[startIdx];
+    qreal startX = startTile->x();
+    qreal tileW = startTile->sceneBoundingRect().width();
+    if (tileW <= 0) tileW = 48;
+
+    pendingWaterConversions.append(startTile);
+
+    for (int i = 1; i < consecutiveCount; i++) {
+        qreal expectedX = startX + i * tileW;
+        for (Tile* t : solidTiles) {
+            if (std::abs(t->x() - expectedX) < 4.0) {
+                pendingWaterConversions.append(t);
+                break;
+            }
+        }
+    }
+}
+
 void DukeFishron::updateLogic() {
     if (isDead || !player) return;
 

@@ -13,7 +13,7 @@ EQ            = =
 first: release
 install: release-install
 uninstall: release-uninstall
-QMAKE         = C:/Qt/6.11.1/mingw_64/bin/qmake.exe
+QMAKE         = C:/Qt/6.11.0/mingw_64/bin/qmake6.exe
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
 MKDIR         = mkdir -p
@@ -23,8 +23,8 @@ COPY_DIR      = cp -f -R
 INSTALL_FILE  = cp -f
 INSTALL_PROGRAM = cp -f
 INSTALL_DIR   = cp -f -R
-QINSTALL      = C:/Qt/6.11.1/mingw_64/bin/qmake.exe -install qinstall
-QINSTALL_PROGRAM = C:/Qt/6.11.1/mingw_64/bin/qmake.exe -install qinstall -exe
+QINSTALL      = C:/Qt/6.11.0/mingw_64/bin/qmake6.exe -install qinstall
+QINSTALL_PROGRAM = C:/Qt/6.11.0/mingw_64/bin/qmake6.exe -install qinstall -exe
 DEL_FILE      = rm -f
 SYMLINK       = $(QMAKE) -install ln -f -s
 DEL_DIR       = rmdir
