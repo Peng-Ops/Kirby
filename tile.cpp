@@ -2,6 +2,7 @@
 #include "player.h"
 #include <cmath>
 #include <QGraphicsScene>
+#include <QPainterPath>
 
 Tile::Tile(TileType type, const QPixmap &pixmap)
     : m_type(type)
@@ -134,4 +135,32 @@ void Tile::updateLogic() {
 void Tile::changeType(TileType newType, const QPixmap &newPix) {
     m_type = newType;
     setPixmap(newPix);
+}
+
+QPainterPath Tile::shape() const {
+    // 对尖刺类型：返回三角形碰撞体积，代替默认的矩形
+    if (m_type == Spike || m_type == AmbushSpike) {
+        QPainterPath path;
+        QRectF r = boundingRect();
+        // 墙刺 (qiangciPix: 24x96, 高度远超宽度)
+        // 地面刺 (ciPix: 24x48, ci2/ci3: 24x24, daoci: 96x24)
+        bool isWall = (r.height() > r.width() * 2.5);
+        if (isWall) {
+            // 墙刺：从左侧中心指向右侧，向左延伸1px确保碰撞
+            path.moveTo(r.left() - 1, r.center().y());
+            path.lineTo(r.right(), r.top());
+            path.lineTo(r.right(), r.bottom());
+        } else {
+            // 地面刺：朝上的三角形，顶部向上延伸1px确保碰撞
+            path.moveTo(r.center().x(), r.top() - 1);
+            path.lineTo(r.left(), r.bottom());
+            path.lineTo(r.right(), r.bottom());
+        }
+        path.closeSubpath();
+        return path;
+    }
+    // 其他方块类型：默认矩形碰撞体积
+    QPainterPath path;
+    path.addRect(boundingRect());
+    return path;
 }

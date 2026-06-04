@@ -1,5 +1,6 @@
 #include "player.h"
 #include <QTransform>
+#include <QGraphicsColorizeEffect>
 
 Player::Player() {
     int frameSize = 48;
@@ -206,6 +207,14 @@ Player::Player() {
             for (int i = 0; i < count; i++)
                 roll.push_back(rollSheet.copy(i * fh, 0, fh, fh));
         }
+        // 攻击
+        QPixmap attackSheet(":/tu/" + prefix + "_attack.png");
+        if (!attackSheet.isNull()) {
+            int fh = attackSheet.height();
+            int count = attackSheet.width() / fh;
+            for (int i = 0; i < count; i++)
+                attack.push_back(attackSheet.copy(i * fh, 0, fh, fh));
+        }
     };
 
 
@@ -225,7 +234,7 @@ void Player::setState(State newState) {
 void Player::startFireSprint() {
     if (isFireSprinting || isExploding) return;
     isFireSprinting = true;
-    fireSprintTimer = 600;          // 冲刺持续 60 帧 (约 1 秒)
+    fireSprintTimer = 240;          // 冲刺持续 60 帧 (约 1 秒)
     fireSkillCooldownTimer = 0;  // 技能冷却 180 帧 (约 3 秒)
     currentFrame = 0;
     animTimer = 0;
@@ -244,6 +253,11 @@ void Player::startExplosion() {
 }
 void Player::startRoll() {
     if (isRolling || isExploding || isAttacking || isLeafSkill || isSwallowing || isSpitting || isDigesting || isFireSprinting) return;
+    // 电形态飞行时按K变为冲刺（不翻滚）
+    if (isLightningFlying) {
+        startLightningDash();
+        return;
+    }
     // 根据形态选择翻滚帧
     QVector<QPixmap>* activeRollFrames = &rollFrames;
     if (currentForm == Enemy::FIRE && !fireRollFrames.isEmpty()) activeRollFrames = &fireRollFrames;
@@ -272,7 +286,60 @@ void Player::endRoll() {
     setState(isOnGround ? IDLE : JUMPING);
 }
 
+void Player::startLightningDash() {
+    isLightningDashing = true;
+    lightningDashTimer = 15;     // 冲刺持续 15 帧 (~0.25秒)
+    // 冲刺时用一个快速动画帧
+    if (!lightningJumpFrames.isEmpty()) {
+        QPixmap img = lightningJumpFrames[0];
+        if (!facingRight) img = img.transformed(QTransform().scale(-1, 1));
+        setOffset((48 - img.width()) / 2.0, 48 - img.height());
+        setPixmap(img);
+    }
+}
+
+void Player::endLightningDash() {
+    isLightningDashing = false;
+    lightningDashTimer = 0;
+    // 恢复电形态飞行
+}
+
+void Player::applySlow(int frames) {
+    slowTimer = frames;
+    isSlowed = true;
+}
+
 void Player::updateLogic() {
+    if (currentForm != Enemy::NONE && !isDigesting) {
+        if (formTimer > 0) {
+            formTimer--;
+            if (formTimer <= 0) {
+                currentForm = Enemy::NONE; // ⏳ 时间到，强制变回普通形态
+
+                // 安全拦截：强制关闭可能正在运行的形态专属技能
+                isIceDefending = false;
+                isFireSprinting = false;
+                isLightningDashing = false;
+                isLeafSkill = false;
+            }
+        }
+    }
+    // 受伤红闪效果（优先级最高，覆盖其他颜色效果）
+    if (damageFlashTimer > 0) {
+        damageFlashTimer--;
+        QGraphicsColorizeEffect *redEffect = new QGraphicsColorizeEffect();
+        redEffect->setColor(QColor(255, 60, 40));
+        this->setGraphicsEffect(redEffect);
+    } else if (slowTimer > 0) {
+        slowTimer--;
+        isSlowed = (slowTimer > 0);
+        QGraphicsColorizeEffect *iceEffect = new QGraphicsColorizeEffect();
+        iceEffect->setColor(QColor(100, 200, 255)); // 冰蓝色
+        this->setGraphicsEffect(iceEffect);
+    } else {
+        isSlowed = false;
+        this->setGraphicsEffect(nullptr);
+    }
     // 1. 技能冷却倒计时
     if (fireSkillCooldownTimer > 0) fireSkillCooldownTimer--;
     if (leafSkillCooldownTimer > 0) leafSkillCooldownTimer--;
@@ -312,6 +379,29 @@ void Player::updateLogic() {
         else setVisible(true);
     } else {
         setVisible(true);
+    }
+
+    // ====== 电形态飞行冲刺（按K触发，向前突进一段） ======
+    if (isLightningDashing) {
+        vx = facingRight ? 15.0 : -15.0;
+        lightningDashTimer--;
+        if (lightningDashTimer <= 0) {
+            endLightningDash();
+        }
+        // 冲刺时播放飞行帧
+        animTimer++;
+        if (animTimer >= 3) {
+            animTimer = 0;
+            currentFrame++;
+            if (currentFrame >= lightningJumpFrames.size()) currentFrame = 0;
+            if (!lightningJumpFrames.isEmpty()) {
+                QPixmap img = lightningJumpFrames[currentFrame];
+                if (!facingRight) img = img.transformed(QTransform().scale(-1, 1));
+                setOffset((48 - img.width()) / 2.0, 48 - img.height());
+                setPixmap(img);
+            }
+        }
+        return;
     }
 
     // ====== 新技能：电形态飞行拦截 ======
@@ -430,7 +520,15 @@ void Player::updateLogic() {
             if (currentFrame >= digestFrames.size()) {
                 isDigesting = false;
                 currentForm = swallowedAbility; // 核心：正式继承肚子里的怪物能力！
+                // 将能力加入收集池（最多保留2个，不重复）
+                if (swallowedAbility != Enemy::NONE && !collectedAbilities.contains(swallowedAbility)) {
+                    if (collectedAbilities.size() >= 2) {
+                        collectedAbilities.removeFirst(); // 移除最旧的
+                    }
+                    collectedAbilities.append(swallowedAbility);
+                }
                 swallowedAbility = Enemy::NONE; // 消化干净，清空胃部
+                formTimer = 1200;
                 setState(isOnGround ? IDLE : JUMPING);
                 return;
             }
@@ -455,6 +553,9 @@ void Player::updateLogic() {
             if (currentFrame == 1) triggerSpitStar = true;
             if (currentFrame >= spitFrames.size()) {
                 isSpitting = false;
+                if (cakeAmmo <= 0) {
+                    isFatty = false;
+                }
                 setState(isOnGround ? IDLE : JUMPING);
                 return;
             }
@@ -635,10 +736,13 @@ void Player::updateLogic() {
             setPixmap(currentImage);
         }
     }
+    if (currentForm == Enemy::SPARK && !isLightningDashing) {
+        vx *= 1.5; // 基础左右走路/飞行速度加快 50%
+    }
 }
 QPainterPath Player::shape() const {
     QPainterPath path;
-    path.addRect(0, 0, 48, 48);
+    path.addRect(4, 4, 40, 44);
     return path;
 }
 // ====== 1. 纯净版的普通攻击 ======
@@ -695,10 +799,16 @@ void Player::endSwallow() {
     isSwallowing = false;
     setState(isFatty ? FATTY_IDLE : (isOnGround ? IDLE : JUMPING));
 }
+// 当 MainWindow 检测到卡比碰撞到蛋糕时，调用这个函数
+void Player::eatCake() {
+    if (currentForm != Enemy::NONE) return; // 如果已经是特殊形态，不能吃蛋糕
+    isFatty = true;
+    cakeAmmo = 2; // 赋予 2 次发射机会
+}
 void Player::startSpit() {
-    if (isSpitting) return;
+    if (isSpitting || cakeAmmo <= 0) return;
     isSpitting = true;
-    isFatty = false;          // 瞬间解除肥胖状态
+    cakeAmmo--;
     triggerSpitStar = false;  // 重置子弹发射旗帜
     setState(SPITTING);
     currentFrame = 0;

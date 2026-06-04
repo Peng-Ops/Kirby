@@ -19,7 +19,7 @@ public:
 
     int hp = 1;
     bool isDead = false;
-    int damage = 1;
+    int damage = 10;
 
     // 给每个敌人身上带一个能力标签，默认没有能力
     CopyAbility ability = NONE;
@@ -28,6 +28,8 @@ public:
     bool ignoresTiles = false;
     // Boss相关标记：是否可被卡比吞噬
     virtual bool canBeSwallowed() { return true; }
+    // 是否在撞墙或悬崖时掉头（Boss小怪禁用防止抖动）
+    bool reversesOnCollision = true;
 
     virtual void takeDamage(int dmg) {
         hp -= dmg;

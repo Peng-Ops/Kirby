@@ -44,7 +44,6 @@
         <file>tu/lightning_walk.png</file>
         <file>tu/lightning_fly.png</file>
         <file>tu/lightning_fangun.png</file>
-        <file>tu/kerby theme music.mp3</file>
         <file>tu/fire_baozha.png</file>
         <file>tu/fire_speedrun.png</file>
         <file>tu/suishi.png</file>
@@ -65,5 +64,43 @@
         <file>tu/icegod_attack.png</file>
         <file>tu/ice god.png</file>
         <file>tu/apple.png</file>
+        <file>tu/Waving Flag Red.gif</file>
+        <file>tu/Clouds 3/1.png</file>
+        <file>tu/Clouds 3/2.png</file>
+        <file>tu/Clouds 3/3.png</file>
+        <file>tu/Clouds 3/4.png</file>
+        <file>tu/fire_lenque.png</file>
+        <file>tu/ice_lenque.png</file>
+        <file>tu/leaf_lenque.png</file>
+        <file>tu/jieshudonghua/bigbird.png</file>
+        <file>tu/jieshudonghua/ending.png</file>
+        <file>tu/jieshudonghua/kirby_huishou.png</file>
+        <file>tu/jieshudonghua/rock.png</file>
+        <file>tu/jieshudonghua/smallbird.png</file>
+        <file>tu/jieshudonghua/sunset.png</file>
+        <file>tu/kerby theme music.mp3</file>
+        <file>tu/kaishidonghua/image.png</file>
+        <file>tu/music/foley_footstep_concrete_1.wav</file>
+        <file>tu/music/pop_1.wav</file>
+        <file>tu/music/sitar_negative_quick.wav</file>
+        <file>tu/music/water_babbling_loop.wav</file>
+        <file>tu/music/grand_piano_negative_long.wav</file>
+        <file>tu/music/harpsichord_level_complete.wav</file>
+        <file>tu/music/snap.wav</file>
+        <file>tu/music/stone_push_medium.wav</file>
+        <file>tu/music/JDSherbert - Pixel Explosions SFX Pack - EMP (1).mp3</file>
+        <file>tu/music/horror_01_stinger_impact_glitch_01.ogg</file>
+        <file>tu/music/rpg_bs004.m4a</file>
+        <file>tu/music/rpg_bs005.m4a</file>
+        <file>tu/music/rpg_bs008.m4a</file>
+        <file>tu/music/rpg_bs009.m4a</file>
+        <file>tu/music/rpg_bs010.m4a</file>
+        <file>tu/muxiang.png</file>
+        <file>tu/basic_enemy.png</file>
+        <file>tu/star.png</file>
+        <file>tu/pigshark2.png</file>
+        <file>tu/pigshark_attack.png</file>
+        <file>tu/qiu.png</file>
+        <file>tu/sword.png</file>
     </qresource>
 </RCC>

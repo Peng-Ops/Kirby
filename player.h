@@ -3,6 +3,7 @@
 #include "gameobject.h"
 #include <QPixmap>
 #include <QVector>
+#include <QList>
 #include <QPainterPath>
 #include "enemy.h"
 
@@ -37,6 +38,10 @@ public:
     // 找到之前的 isAttacking，在它附近添加：
     bool isLeafSkill = false;   // 是否正在释放叶子技能
     bool isLightningFlying = false;
+    bool isLightningDashing = false;
+    int lightningDashTimer = 0;
+    void startLightningDash();
+    void endLightningDash();
     void startLeafSkill();      // 开始释放叶子技能
     void endLeafSkill();        // 结束释放叶子技能
     QPainterPath shape() const override;
@@ -63,6 +68,7 @@ public:
     // ====== 新增：蛋糕带来的攻击能力计时器 ======
     int attackPowerTimer = 0; // 剩余攻击能力的帧数
     bool hasAttackPower() const { return attackPowerTimer > 0; }
+    int starAttackStock = 0;   // 星星单次攻击储备数
     void startDigest();                               // 开始消化能力
     bool isDigesting = false;                         // 是否正在播放消化变身动画
     bool isIceDefending = false;         // 是否正在冰形态防御
@@ -73,7 +79,10 @@ public:
     bool inWater = false;       // 是否在水中
     int stamina = 300;          // 水下体力值 (例如 300 帧大约 5 秒)
     int maxStamina = 300;       // 最大体力值
+    void applySlow(int frames); // 触发减速的函数
+    bool isSlowed = false;      // 是否处于减速状态
     Enemy::CopyAbility currentForm = Enemy::NONE;     // 核心：当前卡比持有的形态能力（预留后续扩展空间）
+    QList<Enemy::CopyAbility> collectedAbilities;     // 已收集的能力池（最多2个），R键切换
 
     // 获取当前形态对应的元素属性
     Element currentElement() const {
@@ -86,9 +95,13 @@ public:
         }
     }
 
+    int formTimer = 0;  // 特殊形态持续时间（帧数，30秒 = 1800帧）
+    int damageFlashTimer = 0;   // 受伤红闪计时器
     int formCancelTimer = 0;  // 长按L取消形态的计时器（60帧=1秒）
 
     void resetRollAnim() { rollCurrentFrame = 0; rollAnimTimer = 0; }
+    void eatCake();     // 吃蛋糕的触发接口
+    int cakeAmmo = 0;   // 蛋糕子弹剩余次数（初始为 0）
 
 private:
     int currentFrame = 0;
@@ -131,6 +144,7 @@ private:
     QVector<QPixmap> fireSprintFrames;
     QVector<QPixmap> fireExplodeFrames;
     QVector<QPixmap> iceDefendFrames;    // 冰形态防御动画帧
+    int slowTimer = 0;          // 减速剩余帧数计时器
 };
 
 #endif // PLAYER_H
