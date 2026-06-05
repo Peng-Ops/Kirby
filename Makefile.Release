@@ -20,7 +20,7 @@ INCPATH       = -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/incl
 LINKER      =        g++
 LFLAGS        =        -Wl,-s -Wl,-subsystem,windows -mthreads
 LIBS        =        C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_64/lib/libQt6Multimedia.a C:/Qt/6.11.0/mingw_64/lib/libQt6Gui.a C:/Qt/6.11.0/mingw_64/lib/libQt6Network.a C:/Qt/6.11.0/mingw_64/lib/libQt6Core.a -lmingw32 C:/Qt/6.11.0/mingw_64/lib/libQt6EntryPoint.a -lshell32  
-QMAKE         = C:/Qt/6.11.0/mingw_64/bin/qmake6.exe
+QMAKE         = C:/Qt/6.11.0/mingw_64/bin/qmake.exe
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
 MKDIR         = mkdir -p
@@ -30,8 +30,8 @@ COPY_DIR      = cp -f -R
 INSTALL_FILE  = cp -f
 INSTALL_PROGRAM = cp -f
 INSTALL_DIR   = cp -f -R
-QINSTALL      = C:/Qt/6.11.0/mingw_64/bin/qmake6.exe -install qinstall
-QINSTALL_PROGRAM = C:/Qt/6.11.0/mingw_64/bin/qmake6.exe -install qinstall -exe
+QINSTALL      = C:/Qt/6.11.0/mingw_64/bin/qmake.exe -install qinstall
+QINSTALL_PROGRAM = C:/Qt/6.11.0/mingw_64/bin/qmake.exe -install qinstall -exe
 DEL_FILE      = rm -f
 SYMLINK       = $(QMAKE) -install ln -f -s
 DEL_DIR       = rmdir
@@ -146,7 +146,7 @@ release/kirby.exe: C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_
 	$(LINKER) $(LFLAGS) -o $(DESTDIR_TARGET) @release/object_script.kirby.Release $(LIBS)
 
 qmake: FORCE
-	@$(QMAKE) -o Makefile.Release kirby.pro
+	@$(QMAKE) -o Makefile.Release kirby.pro -spec win32-g++ CONFIG+=release CONFIG-=debug
 
 qmake_all: FORCE
 
