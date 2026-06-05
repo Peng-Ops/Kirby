@@ -52,6 +52,8 @@ private slots:
 
 private:
     QList<QGraphicsPixmapItem*> lifeIcons; // 存放生命值图标的列表
+    QGraphicsRectItem* playerHpBarBg = nullptr;
+    QGraphicsRectItem* playerHpBarFg = nullptr;
     int playerMaxHp = 5;
     Ui::MainWindow *ui;
     QGraphicsScene *scene;
