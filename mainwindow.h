@@ -105,6 +105,20 @@ private:
     bool bgmPaused = false;
     bool prevExploding = false;     // 爆炸音效边缘检测
     bool cratePushSoundPlayed = false; // 木箱推动音效每帧只播一次
+    // ====== 木箱推动动画（0.5秒平滑缓动） ======
+    struct CratePushAnim {
+        bool active = false;
+        Crate* crate = nullptr;
+        double startX = 0;
+        double endX = 0;
+        double crateY = 0;
+        double playerStartX = 0;
+        double playerEndX = 0;
+        double playerY = 0;
+        int timer = 0;
+        int duration = 30; // 0.5s at 60fps
+    };
+    CratePushAnim crateAnim;
     int aiTimer = 0;
     int screenShakeTimer = 0;
     qreal actualCameraX = 500.0;    // 当前实际相机X（已做边界钳制）
@@ -173,6 +187,10 @@ private:
     QGraphicsRectItem* settingsVolHandle = nullptr;
     QRectF settingsVolRect;
     bool settingsDragging = false;
+    bool settingsFromPause = false;                  // 设置是否从暂停打开
+    QGraphicsPixmapItem* settingsResumeBtn = nullptr; // 暂停→设置中的"继续游戏"按钮
+    QPixmap settingsResumePressedPix;                 // 按下帧
+    QRectF settingsResumeRect;
 
     // ====== 选关UI ======
     QGraphicsRectItem* selectOverlay = nullptr;
@@ -182,6 +200,14 @@ private:
     QList<QRectF> cardRects;
     QList<int> cardLevelNums;  // 每个卡片对应的关卡号
     QList<QGraphicsTextItem*> categoryHeaders;
+    QList<QGraphicsPixmapItem*> levelBtnImages;      // 模式按钮图片
+    QVector<QPixmap> levelBtnPressedPixmaps;           // 按钮按下帧(第二帧)
+    QVector<QPixmap> mainMenuPressedPixmaps;           // 主菜单按钮按下帧
+    QVector<QPixmap> bossCardPressedPixmaps;           // Boss选择anjian按下帧
+    QVector<QPixmap> pausePressedPixmaps;              // 暂停按钮按下帧
+    QVector<QPixmap> gameOverPressedPixmaps;           // 游戏结束按钮按下帧
+    QPixmap settingsBackPressedPix;                    // 设置界面返回按钮按下帧
+    int levelSelectDelay = 0;                         // 模式选择延迟计数(帧)
     int modeSelection = 0;     // 模式选择标记 (0=无, 1=冒险, 21=Boss1克苏鲁, 22=Boss2猪鲨, 23=Boss3冰雪)
 
     // ====== Boss选择子菜单 ======
@@ -276,6 +302,7 @@ private:
     QGraphicsRectItem* endingOverlay = nullptr;
     QGraphicsRectItem* endingBlackBg = nullptr;  // 结束动画黑底（需清理防止泄漏）
     QGraphicsPixmapItem* endingMenuBtn = nullptr;   // restart图标
+    QPixmap endingMenuBtnPressedPix;                 // 按下帧
     QRectF endingMenuBtnRect;                        // 点击区域
     QVector<QPixmap> endingKirbyFrames;
     QVector<QPixmap> endingBigBirdFrames;

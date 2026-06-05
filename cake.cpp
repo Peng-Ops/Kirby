@@ -1,10 +1,3 @@
-#include "cake.h"
-
-Cake::Cake() {
-    // 加载蛋糕图片资源
-    setPixmap(QPixmap(":/tu/cake.png"));
-}
-
-void Cake::updateLogic() {
-    // 静态道具暂时不需要移动逻辑，留空即可
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:01fef84231086f58fca6af3db896b08344a648a22962d99eed714437427cdb35
+size 209

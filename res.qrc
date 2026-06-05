@@ -3,6 +3,7 @@
         <file>tu/kirby_daiji.png</file>
         <file>tu/kirby_fly.png</file>
         <file>tu/kirby_walk.png</file>
+        <file>tu/anjian.png</file>
         <file>tu/Assets.png</file>
         <file>tu/Background_1.png</file>
         <file>tu/Background_2.png</file>
@@ -95,7 +96,10 @@
         <file>tu/music/rpg_bs008.m4a</file>
         <file>tu/music/rpg_bs009.m4a</file>
         <file>tu/music/rpg_bs010.m4a</file>
+        <file>tu/maoxian.png</file>
+        <file>tu/mianban.png</file>
         <file>tu/muxiang.png</file>
+        <file>tu/bosszhan.png</file>
         <file>tu/basic_enemy.png</file>
         <file>tu/star.png</file>
         <file>tu/pigshark2.png</file>

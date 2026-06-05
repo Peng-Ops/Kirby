@@ -1,15 +1,3 @@
-#include "star.h"
-
-Star::Star() {
-    QPixmap sheet(":/tu/star.png");
-    if (!sheet.isNull() && sheet.width() >= 48) {
-        // 精灵图是 192x48 的4帧横排，取第一帧
-        setPixmap(sheet.copy(0, 0, 48, 48));
-    } else {
-        setPixmap(sheet);
-    }
-}
-
-void Star::updateLogic() {
-    // 静态道具暂时不需要移动逻辑，留空即可
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:e6f28931bafb765c043c3534625e69f887a5f7ad82b588a7619ffce6f5f5dbd6
+size 364
