@@ -22,6 +22,7 @@ public:
     BossState state = FLYING;
     int fullHp = 400;
     bool isPhase2 = false;     // 半血进入二阶段
+    bool phase2BgTriggered = false;  // 通知主窗口切换背景
     int invulnTimer = 0;
     bool isDying = false;
     int deathTimer = 0;        // 死亡动画计时器

@@ -33,8 +33,9 @@ public:
     void removeXuehua(Xuehua* x);
 
     State state = FLYING;
-    int fullHp = 600;
+    int fullHp = 400;
     int summonWave = 0;  // 0=初始, 1=2/3血, 2=1/3血
+    bool phase2BgTriggered = false;  // 通知主窗口切换背景
     bool isDying = false;
     int deathTimer = 0;  // 死亡动画计时器
 

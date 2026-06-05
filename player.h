@@ -56,6 +56,7 @@ public:
     bool isFireSprinting = false;     // 是否正在火形态疾跑
     int fireSprintTimer = 0;          // 疾跑剩余时间
     bool isExploding = false;         // 是否正在爆炸
+    bool explosionHitEnemy = false;   // 爆炸是否已造成过伤害（防每帧重复）
     int fireSkillCooldownTimer = 0;   // 技能冷却倒计时 (0表示可以使用)
     int leafSkillCooldownTimer = 0;
     void startFireSprint();
