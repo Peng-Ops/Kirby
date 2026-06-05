@@ -76,25 +76,46 @@ QPainterPath IceGod::shape() const {
 }
 
 void IceGod::takeDamage(int dmg) {
+    if (state == DYING) return;
+
     int actualDmg = dmg;
     // 火形态伤害翻倍
     if (player && player->currentForm == Enemy::FIRE) {
         actualDmg *= 2;
     }
     Enemy::takeDamage(actualDmg);
+    if (isDead) {
+        isDead = false;
+        hp = 1;
+        isDying = true;
+        state = DYING;
+        deathTimer = 0;
+        vx = 0; vy = 0;
+        damage = 0;
+        setVisible(true);
+        // 清理所有雪花（标记死亡并隐藏）
+        for (Xuehua* x : xuehuas) {
+            x->isDead = true;
+            x->setVisible(false);
+        }
+        xuehuas.clear();
+        pendingXuehuas.clear();
+        pendingProjectiles.clear();
+    }
 
     // 检查召唤波次
-    int newWave = -1;
-    if (summonWave == 0 && hp <= fullHp * 2 / 3) {
-        newWave = 1;
-    } else if (summonWave <= 1 && hp <= fullHp * 1 / 3) {
-        newWave = 2;
-    }
-    if (newWave > summonWave) {
-        summonWave = newWave;
-        // 低血量召唤更多雪花
-        int count = (newWave == 1) ? 4 : 6;
-        summonXuehuas(count);
+    if (!isDying) {
+        int newWave = -1;
+        if (summonWave == 0 && hp <= fullHp * 2 / 3) {
+            newWave = 1;
+        } else if (summonWave <= 1 && hp <= fullHp * 1 / 3) {
+            newWave = 2;
+        }
+        if (newWave > summonWave) {
+            summonWave = newWave;
+            int count = (newWave == 1) ? 4 : 6;
+            summonXuehuas(count);
+        }
     }
 }
 
@@ -250,6 +271,19 @@ void IceGod::updateLogic() {
         if (xuehuas[i]->isDead) {
             xuehuas.removeAt(i);
         }
+    }
+
+    // ====== 死亡动画 ======
+    if (state == DYING) {
+        deathTimer++;
+        if (deathTimer < 90) {
+            int interval = 8 - deathTimer / 11;
+            if (interval < 1) interval = 1;
+            setVisible((deathTimer / interval) % 2 == 0);
+        } else if (deathTimer < 120) {
+            setVisible(true);
+        }
+        return;
     }
 
     switch (state) {

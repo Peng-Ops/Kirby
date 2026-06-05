@@ -20,7 +20,8 @@ public:
         SUMMONING,    // 召唤雪花
         ICE_SPREAD,   // 圆形冰锥扩散
         ICE_BEAM,     // 瞄准冰束
-        ICE_RAIN      // 冰锥雨
+        ICE_RAIN,     // 冰锥雨
+        DYING         // 死亡动画
     };
 
     IceGod(Player* target);
@@ -34,6 +35,8 @@ public:
     State state = FLYING;
     int fullHp = 600;
     int summonWave = 0;  // 0=初始, 1=2/3血, 2=1/3血
+    bool isDying = false;
+    int deathTimer = 0;  // 死亡动画计时器
 
     QList<Xuehua*> xuehuas;
     QList<Xuehua*> pendingXuehuas;   // 新生成的雪花，主窗口从这里取

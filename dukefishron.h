@@ -15,7 +15,7 @@ class DukeFishron : public BossEnemy {
 public:
     // 扩展状态：新增二阶段过渡、二阶段地面、三阶段
     enum BossState { FLYING, PREPARING, CHARGING, COOLDOWN,
-                     PHASE_TRANSITION, PHASE_TWO, PHASE_THREE };
+                     PHASE_TRANSITION, PHASE_TWO, PHASE_THREE, DYING };
 
     DukeFishron(Player* target);
     void updateLogic() override;
@@ -30,6 +30,8 @@ public:
     bool isPhase2 = false;
     bool isPhase3 = false;
     bool phase2BgTriggered = false;  // 通知主窗口切换背景
+    bool isDying = false;
+    int deathTimer = 0;            // 死亡动画计时器
 
     // ====== 二阶段弹幕 ======
     QList<Projectile*> pendingProjectiles;

@@ -12,7 +12,7 @@
 
 class BrainOfCthulhu : public BossEnemy {
 public:
-    enum BossState { FLYING, ATTACKING, PHASE2_TELEPORT, PHASE2_CHASE };
+    enum BossState { FLYING, ATTACKING, PHASE2_TELEPORT, PHASE2_CHASE, DYING };
 
     BrainOfCthulhu(Player* target);
     void updateLogic() override;
@@ -23,6 +23,8 @@ public:
     int fullHp = 400;
     bool isPhase2 = false;     // 半血进入二阶段
     int invulnTimer = 0;
+    bool isDying = false;
+    int deathTimer = 0;        // 死亡动画计时器
 
     // 主窗口从这里取弹幕加入场景
     QList<Projectile*> pendingProjectiles;

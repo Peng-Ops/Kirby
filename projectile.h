@@ -17,6 +17,7 @@ public:
     bool hasGravity = false;   // 是否受重力影响（冰锥等）
     bool ignoresWalls = false; // 是否无视地形碰撞（Boss弹幕用）
     bool causesSlow = false;  // 该弹幕击中玩家时是否触发减速
+    bool isStar = false;      // 是否为星星子弹（击中敌人时回收）
 
     // 动画支持（Boss弹幕用）
     QVector<QPixmap> animFrames;

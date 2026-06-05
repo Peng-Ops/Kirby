@@ -101,6 +101,15 @@
         <file>tu/pigshark2.png</file>
         <file>tu/pigshark_attack.png</file>
         <file>tu/qiu.png</file>
-        <file>tu/sword.png</file>
+        <file>tu/Outer_Lower.png</file>
+        <file>tu/start.png</file>
+        <file>tu/restart.png</file>
+        <file>tu/shezhi.png</file>
+        <file>tu/quit.png</file>
+        <file>tu/continue.png</file>
+        <file>tu/setting.png</file>
+        <file>tu/zhushahuizhang.png</file>
+        <file>tu/naohuizhang.png</file>
+        <file>tu/nvwanghuizhang.png</file>
     </qresource>
 </RCC>

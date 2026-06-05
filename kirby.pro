@@ -20,6 +20,7 @@ SOURCES += \
     player.cpp \
     projectile.cpp \
     star.cpp \
+    badge.cpp \
     tile.cpp \
     xuehua.cpp
 
@@ -40,6 +41,7 @@ HEADERS += \
     player.h \
     projectile.h \
     star.h \
+    badge.h \
     tile.h \
     xuehua.h
 
