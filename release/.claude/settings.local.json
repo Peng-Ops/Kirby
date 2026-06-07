@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d D:/**)",
+      "Bash(qmake kirby.pro)",
+      "Bash(ls -la \"D:/kirbygame/release/\"*.exe)",
+      "Bash(ls -la \"D:/kirbygame/\"*.exe)",
+      "Bash(qmake --version)",
+      "Bash(qmake6 --version)",
+      "Bash(export PATH=\"/c/Qt/6.11.0/mingw_64/bin:$PATH\")",
+      "Bash(pwd -W)",
+      "Bash(export PATH=\"/c/Qt/6.11.0/mingw_64/bin:/c/msys64/ucrt64/bin:$PATH\")",
+      "Bash(g++ -c -fno-keep-inline-dllexport -O2 -Wall -Wextra -fexceptions -mthreads -DUNICODE -D_UNICODE -DWIN32 -DMINGW_HAS_SECURE_API=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtMultimedia -IC:/Qt/6.11.0/mingw_64/include/QtGui -IC:/Qt/6.11.0/mingw_64/include/QtNetwork -IC:/Qt/6.11.0/mingw_64/include/QtCore -Irelease -I. -I/include -IC:/Qt/6.11.0/mingw_64/mkspecs/win32-g++ -o release/mainwindow.o mainwindow.cpp)",
+      "Bash(mingw32-make -f Makefile.Release)",
+      "Bash(export PATH=/c/Qt/6.11.0/mingw_64/bin:/c/msys64/ucrt64/bin:$PATH)",
+      "Bash(g++ -c -fno-keep-inline-dllexport -O2 -Wall -Wextra -fexceptions -mthreads -DUNICODE -D_UNICODE -DWIN32 -DMINGW_HAS_SECURE_API=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtMultimedia -IC:/Qt/6.11.0/mingw_64/include/QtGui -IC:/Qt/6.11.0/mingw_64/include/QtNetwork -IC:/Qt/6.11.0/mingw_64/include/QtCore -Irelease -I. -IC:/Qt/6.11.0/mingw_64/mkspecs/win32-g++ -o /tmp/test_compile.o mainwindow.cpp)",
+      "Read(//tmp/**)",
+      "Bash(export PATH=\"/c/Qt/6.11.0/mingw_64/bin:/c/msys64/mingw64/bin:/c/msys64/ucrt64/bin:$PATH\")",
+      "Bash(g++ -std=c++17 -fno-keep-inline-dllexport -O2 -Wall -Wextra -fexceptions -mthreads -DUNICODE -D_UNICODE -DWIN32 -DMINGW_HAS_SECURE_API=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtMultimedia -IC:/Qt/6.11.0/mingw_64/include/QtGui -IC:/Qt/6.11.0/mingw_64/include/QtNetwork -IC:/Qt/6.11.0/mingw_64/include/QtCore -Irelease -I. -IC:/Qt/6.11.0/mingw_64/mkspecs/win32-g++ -fsyntax-only mainwindow.cpp)",
+      "Bash(export PATH=\"/c/Qt/6.11.0/mingw_64/bin:/c/msys64/mingw64/bin:$PATH\")",
+      "Bash(g++ -std=c++17 -fno-keep-inline-dllexport -fsyntax-only -Wall -Wextra -DUNICODE -D_UNICODE -DWIN32 -DMINGW_HAS_SECURE_API=1 -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtMultimedia -IC:/Qt/6.11.0/mingw_64/include/QtGui -IC:/Qt/6.11.0/mingw_64/include/QtNetwork -IC:/Qt/6.11.0/mingw_64/include/QtCore -Irelease -I. -IC:/Qt/6.11.0/mingw_64/mkspecs/win32-g++ mainwindow.cpp)",
+      "Bash(g++ -std=c++17 -fsyntax-only -fexceptions -DUNICODE -DQT_NO_DEBUG -DQT_WIDGETS_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtCore -Irelease mainwindow.cpp)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(ls /c/Qt/6.11.0/mingw_64/bin/*.exe)",
+      "Bash(g++ --version)",
+      "Bash(ls \"D:/kirbygame/\"*.pro \"D:/kirbygame/release/\"*.pro)",
+      "Bash(ls \"D:/kirbygame/\"Makefile* \"D:/kirbygame/release/\"Makefile*)",
+      "Bash(mingw32-make -j1)",
+      "Bash(g++ -Wl,-s -Wl,-subsystem,windows -mthreads -o release/kirby.exe @release/object_script.kirby.Release C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_64/lib/libQt6Multimedia.a C:/Qt/6.11.0/mingw_64/lib/libQt6Gui.a C:/Qt/6.11.0/mingw_64/lib/libQt6Network.a C:/Qt/6.11.0/mingw_64/lib/libQt6Core.a -lmingw32 C:/Qt/6.11.0/mingw_64/lib/libQt6EntryPoint.a -lshell32)",
+      "Bash(g++ -Wl,-subsystem,windows -mthreads -o release/kirby.exe @release/object_script.kirby.Release C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_64/lib/libQt6Multimedia.a C:/Qt/6.11.0/mingw_64/lib/libQt6Gui.a C:/Qt/6.11.0/mingw_64/lib/libQt6Network.a C:/Qt/6.11.0/mingw_64/lib/libQt6Core.a -lmingw32 C:/Qt/6.11.0/mingw_64/lib/libQt6EntryPoint.a -lshell32)",
+      "Bash(g++ -v -Wl,-subsystem,windows -mthreads -o release/kirby.exe @release/object_script.kirby.Release C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_64/lib/libQt6Multimedia.a C:/Qt/6.11.0/mingw_64/lib/libQt6Gui.a C:/Qt/6.11.0/mingw_64/lib/libQt6Network.a C:/Qt/6.11.0/mingw_64/lib/libQt6Core.a -lmingw32 C:/Qt/6.11.0/mingw_64/lib/libQt6EntryPoint.a -lshell32)",
+      "Bash(ls \"C:/Qt/6.11.0/mingw_64/bin/\"g++* \"C:/Qt/6.11.0/mingw_64/bin/\"mingw32-make*)",
+      "Bash(ls \"C:/Qt/Tools/mingw\"*\"/bin/\"g++*)",
+      "Bash(ls \"C:/Qt/Tools/\"*/bin/g++*)",
+      "Bash(PATH=\"C:/Qt/Tools/mingw1310_64/bin:$PATH\")",
+      "Bash(tasklist)",
+      "Bash(\"C:/Qt/Tools/mingw1310_64/bin/g++.exe\" -Wl,-s -Wl,-subsystem,windows -mthreads -o release/kirby.exe @release/object_script.kirby.Release C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_64/lib/libQt6Multimedia.a C:/Qt/6.11.0/mingw_64/lib/libQt6Gui.a C:/Qt/6.11.0/mingw_64/lib/libQt6Network.a C:/Qt/6.11.0/mingw_64/lib/libQt6Core.a -lmingw32 C:/Qt/6.11.0/mingw_64/lib/libQt6EntryPoint.a -lshell32)"
+    ]
+  }
+}

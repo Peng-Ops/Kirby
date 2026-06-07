@@ -146,7 +146,7 @@ debug/kirby.exe: C:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a C:/Qt/6.11.0/mingw_64
 	$(LINKER) $(LFLAGS) -o $(DESTDIR_TARGET) @debug/object_script.kirby.Debug $(LIBS)
 
 qmake: FORCE
-	@$(QMAKE) -o Makefile.Debug kirby.pro -spec win32-g++ CONFIG+=release CONFIG-=debug
+	@$(QMAKE) -o Makefile.Debug kirby.pro
 
 qmake_all: FORCE
 
