@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(make -j4)",
-      "Bash(g++ -c -fno-keep-inline-dllexport -g -Wall -Wextra -fexceptions -mthreads -DUNICODE -D_UNICODE -DWIN32 -DMINGW_HAS_SECURE_API=1 -DQT_QML_DEBUG -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I../../../kirbygame -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtMultimedia -IC:/Qt/6.11.0/mingw_64/include/QtGui -IC:/Qt/6.11.0/mingw_64/include/QtNetwork -IC:/Qt/6.11.0/mingw_64/include/QtCore -Idebug -I. -I/include -IC:/Qt/6.11.0/mingw_64/mkspecs/win32-g++ -o debug/mainwindow.o ../../mainwindow.cpp)"
+      "Bash(g++ -c -fno-keep-inline-dllexport -g -Wall -Wextra -fexceptions -mthreads -DUNICODE -D_UNICODE -DWIN32 -DMINGW_HAS_SECURE_API=1 -DQT_QML_DEBUG -DQT_WIDGETS_LIB -DQT_MULTIMEDIA_LIB -DQT_GUI_LIB -DQT_NETWORK_LIB -DQT_CORE_LIB -DQT_NEEDS_QMAIN -I../../../kirbygame -I. -IC:/Qt/6.11.0/mingw_64/include -IC:/Qt/6.11.0/mingw_64/include/QtWidgets -IC:/Qt/6.11.0/mingw_64/include/QtMultimedia -IC:/Qt/6.11.0/mingw_64/include/QtGui -IC:/Qt/6.11.0/mingw_64/include/QtNetwork -IC:/Qt/6.11.0/mingw_64/include/QtCore -Idebug -I. -I/include -IC:/Qt/6.11.0/mingw_64/mkspecs/win32-g++ -o debug/mainwindow.o ../../mainwindow.cpp)",
+      "Bash(pip install:*)",
+      "Bash(pip list:*)",
+      "Bash(perl --version)",
+      "Bash(cd /tmp)",
+      "Bash(npm list:*)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(fc-list :lang=zh)",
+      "Bash(node generate_report.js)",
+      "Bash(node -e \":*)",
+      "Bash(cd:*)",
+      "Bash(node gen_report.js)",
+      "Bash(rm -f gen_report.js)",
+      "Bash(rm -rf node_modules package.json package-lock.json)"
     ]
   }
 }
