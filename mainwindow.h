@@ -252,6 +252,42 @@ private:
     int savedStamina = 300;
     int savedAttackPowerTimer = 0;
 
+    // ====== 检查点世界快照（冒险模式）======
+    struct TileSnapshot {
+        Tile::TileType type;
+        QPixmap pixmap;
+        QPointF pos;
+        qreal scale = 1.0;
+        bool inFloors = false;
+        bool inWaters = false;
+        bool inSpikes = false;
+    };
+    struct EnemySnapshot {
+        Enemy::CopyAbility ability = Enemy::NONE;
+        QPointF pos;
+        int hp = 1;
+        bool facingRight = false;
+    };
+    struct CheckpointSnapshot {
+        QPointF pos;
+        qreal scale = 1.0;
+        bool activated = false;
+    };
+    struct SimpleItemSnapshot {
+        QPointF pos;
+        qreal z = 0.0;
+    };
+    bool checkpointWorldSnapshotValid = false;
+    QList<TileSnapshot> checkpointTiles;
+    QList<EnemySnapshot> checkpointEnemies;
+    QList<CheckpointSnapshot> checkpointCheckpoints;
+    QList<SimpleItemSnapshot> checkpointCakes;
+    QList<SimpleItemSnapshot> checkpointCrates;
+    QList<SimpleItemSnapshot> checkpointGoals;
+    void saveCheckpointWorldSnapshot();
+    void restoreCheckpointWorldSnapshot();
+    void clearCheckpointWorldSnapshot();
+
     // ====== 360度瞄准系统（Boss模式专用）======
     double shootAngle = 0.0;
 
