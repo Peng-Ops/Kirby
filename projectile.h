@@ -2,6 +2,7 @@
 #define PROJECTILE_H
 
 #include "gameobject.h"
+#include <QPainterPath>
 
 class Projectile : public GameObject {
 public:
@@ -9,6 +10,7 @@ public:
     // 新增：自定义贴图+任意方向速度（Boss弹幕用）
     Projectile(const QPixmap &pix, double velX, double velY, int lifetime = 60, int dmg = 1);
     void updateLogic() override;
+    QPainterPath shape() const override;
 
     int damage = 1;      // 攻击力
     int lifeTime = 60;   // 存活时间（帧数）
@@ -18,6 +20,7 @@ public:
     bool ignoresWalls = false; // 是否无视地形碰撞（Boss弹幕用）
     bool causesSlow = false;  // 该弹幕击中玩家时是否触发减速
     bool isStar = false;      // 是否为星星子弹（击中敌人时回收）
+    double collisionScale = 1.0; // 碰撞范围缩放，1为原始贴图范围
 
     // 动画支持（Boss弹幕用）
     QVector<QPixmap> animFrames;

@@ -88,7 +88,7 @@ private:
     QVector<QPixmap> attackFrames;     // pigshark_attack (3帧)
 
     // ====== 二阶段：弹幕 ======
-    int phase2Timer = 0;               // 二阶段总计时 (2400帧=40秒)
+    int phase2Timer = 0;               // 二阶段总计时 (1200帧=20秒)
     int phase2HoverTimer = 0;          // 悬浮浮动计时
     int phase2ShootTimer = 0;
     int phase2ShootInterval = 30;      // 每30帧发射一波
