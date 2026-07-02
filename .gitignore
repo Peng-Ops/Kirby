@@ -1,4 +1,6 @@
-*.user
+﻿*.user
 build/
 build-*/
 debug/
+kirby.mp4
+
