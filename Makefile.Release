@@ -146,7 +146,7 @@ release/kirby.exe: D:/Qt/6.11.0/mingw_64/lib/libQt6Widgets.a D:/Qt/6.11.0/mingw_
 	$(LINKER) $(LFLAGS) -o $(DESTDIR_TARGET) @release\object_script.kirby.Release $(LIBS)
 
 qmake: FORCE
-	@$(QMAKE) -o Makefile.Release kirby.pro
+	@$(QMAKE) -o Makefile.Release kirby.pro -spec win32-g++ "CONFIG+=release" "CONFIG-=debug"
 
 qmake_all: FORCE
 
@@ -1075,12 +1075,12 @@ release/basicenemy.o: basicenemy.cpp basicenemy.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qimage.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qpixelformat.h \
 		projectile.h \
+		../../../../Qt/6.11.0/mingw_64/include/QtGui/QPainterPath \
 		player.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/QPixmap \
 		../../../../Qt/6.11.0/mingw_64/include/QtCore/QVector \
 		../../../../Qt/6.11.0/mingw_64/include/QtCore/qvector.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtCore/QList \
-		../../../../Qt/6.11.0/mingw_64/include/QtGui/QPainterPath \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/QTransform \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/QPainter \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qpainter.h \
@@ -3505,6 +3505,7 @@ release/projectile.o: projectile.cpp projectile.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qrgba64.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qimage.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qpixelformat.h \
+		../../../../Qt/6.11.0/mingw_64/include/QtGui/QPainterPath \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/QPainter \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qpainter.h \
 		../../../../Qt/6.11.0/mingw_64/include/QtGui/qtextoption.h \
